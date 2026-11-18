@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Informe de investigación - Mensajero WebRTC</title>
+<style>
+  @page { size: A4; margin: 15mm 16mm 16mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Calibri, Arial, sans-serif; font-size: 9.6pt; line-height: 1.38; color: #1b1f23; margin: 0; }
+  h1 { font-size: 17pt; margin: 0 0 2px; }
+  h2 { font-size: 12pt; margin: 12px 0 4px; padding-bottom: 2px; border-bottom: 1.5px solid #1f6f5c; color: #1f6f5c; page-break-after: avoid; }
+  h3 { font-size: 10pt; margin: 8px 0 2px; page-break-after: avoid; }
+  p { margin: 3px 0 5px; text-align: justify; }
+  ul, ol { margin: 3px 0 5px; padding-left: 18px; }
+  li { margin: 1px 0; }
+  .meta { color: #555; margin: 0 0 6px; font-size: 9pt; }
+  table { border-collapse: collapse; width: 100%; margin: 4px 0 7px; font-size: 8.6pt; page-break-inside: avoid; }
+  th, td { border: 1px solid #c9cdc6; padding: 3px 5px; vertical-align: top; text-align: left; }
+  th { background: #eef1ec; }
+  code { font-family: Consolas, monospace; font-size: 8.6pt; background: #f1f2ef; padding: 0 2px; }
+  pre { font-family: Consolas, monospace; font-size: 8.2pt; background: #f4f5f2; border: 1px solid #dcdfd8; padding: 5px 7px; margin: 4px 0 6px; white-space: pre-wrap; page-break-inside: avoid; }
+  figure { margin: 6px 0 8px; text-align: center; page-break-inside: avoid; }
+  figure img { max-width: 100%; }
+  figcaption { font-size: 8.4pt; color: #555; margin-top: 2px; }
+  .dos { display: flex; gap: 8px; align-items: flex-start; }
+  .dos figure { flex: 1; }
+  .q { font-weight: 600; margin-top: 6px; }
+  .ref { font-size: 8.2pt; }
+  .ref li { margin: 0 0 1px; }
+  .salto { page-break-before: always; }
+  .nota { background: #eef6f3; border-left: 3px solid #1f6f5c; padding: 4px 8px; margin: 5px 0; }
+</style>
+</head>
+<body>
+
+<h1>Informe de investigación: mensajero WebRTC en dos nodos Docker</h1>
+<p class="meta">Sistemas Distribuidos · Universidad Tecnológica de Pereira · Docente: Felipe Gutiérrez Isaza · Estudiante: Santiago Guevara · Noviembre de 2026</p>
+
+<p>Este informe responde, con fuentes, las preguntas de la fase de investigación y termina con la arquitectura propuesta. Las referencias van entre corchetes, por ejemplo [3], y se listan al final. La plataforma elegida es <b>Docker</b>, así que del bloque A se responden las preguntas comunes y las de Docker.</p>
+
+<h2>Bloque A. Contenedores, máquinas virtuales y redes</h2>
+
+<p class="q">A.1 ¿Qué diferencia hay entre virtualización completa y contenedores?</p>
+<p>Una máquina virtual (MV) emula un computador completo sobre un hipervisor: cada MV arranca su propio núcleo y su sistema operativo invitado. Un contenedor es un proceso aislado que <b>comparte el núcleo del anfitrión</b>; el aislamiento lo dan los <i>namespaces</i> (qué ve el proceso) y los <i>cgroups</i> (cuántos recursos usa) del núcleo Linux [1][2].</p>
+<table>
+  <tr><th>Criterio</th><th>Máquina virtual</th><th>Contenedor</th></tr>
+  <tr><td>Aislamiento</td><td>Fuerte: núcleo propio, frontera en el hipervisor.</td><td>Menor: comparten núcleo; una falla del núcleo afecta a todos.</td></tr>
+  <tr><td>Recursos</td><td>Alto: RAM y disco reservados para cada sistema invitado (GB).</td><td>Bajo: solo el proceso y sus librerías (MB). Felter et al. midieron rendimiento casi nativo en CPU y memoria [3].</td></tr>
+  <tr><td>Arranque</td><td>Decenas de segundos (arranca un sistema operativo).</td><td>Menos de un segundo a pocos segundos (arranca un proceso).</td></tr>
+  <tr><td>Portabilidad</td><td>Imágenes de disco grandes, ligadas al hipervisor.</td><td>Imágenes en capas que corren igual en cualquier motor compatible con OCI.</td></tr>
+</table>
+
+<p class="q">A.2 ¿Qué plataforma elegí y por qué?</p>
+<p>Elegí <b>Docker con Docker Compose</b>. <b>Gano</b>: los dos nodos arrancan con un solo comando (<code>docker compose up --build</code>), la red y los nombres se declaran en un archivo, consume poca memoria (mi equipo corre los dos nodos sin problema) y es la herramienta que pide la industria. <b>Pierdo</b> frente a las MV: el aislamiento es menor, el contenedor no ve la cámara del anfitrión (no lo necesito, porque la captura ocurre en el navegador, ver D.2) y, en Windows, Docker Desktop corre los contenedores dentro de una MV ligera de WSL 2 [4], así que dependo de que esa capa funcione.</p>
+
+<p class="q">A.3 ¿Cómo se comunican dos nodos en una red virtual y cómo se encuentran por nombre?</p>
+<p>Ambos nodos se conectan a la misma red virtual (un <i>bridge</i> de software): cada uno recibe una IP privada y se ven entre sí como en una LAN. Para no escribir IP en el código, un servicio de DNS traduce el nombre del nodo a su IP actual. En Docker ese DNS lo provee el propio motor en las redes definidas por el usuario (A.6).</p>
+
+<p class="q">A.4 Imagen frente a contenedor, e instrucciones del Dockerfile</p>
+<p>Una <b>imagen</b> es una plantilla de solo lectura formada por capas; un <b>contenedor</b> es una instancia en ejecución de esa imagen con una capa de escritura propia [5]. De una imagen salen muchos contenedores (aquí, <code>nodo-a</code> y <code>nodo-b</code> salen de la misma). Instrucciones que usaré [6]: <code>FROM</code> (imagen base, <code>node:22-alpine</code>), <code>WORKDIR</code> (carpeta de trabajo), <code>COPY</code> (copia archivos del proyecto), <code>RUN</code> (ejecuta un comando al construir, p. ej. <code>npm ci</code>), <code>ENV</code> (variables de entorno), <code>EXPOSE</code> (documenta el puerto), <code>USER</code> (corre sin privilegios de root), <code>HEALTHCHECK</code> (comando que dice si el servicio está sano) y <code>CMD</code> (comando que arranca el contenedor).</p>
+
+<p class="q">A.5 Tipos de red de Docker y cuál conviene</p>
+<table>
+  <tr><th>Red</th><th>Qué hace</th><th>¿Sirve aquí?</th></tr>
+  <tr><td>bridge</td><td>Red privada en el anfitrión; los contenedores salen por NAT. La red por defecto no resuelve nombres; una <b>definida por el usuario</b> sí [7].</td><td><b>Sí</b>: aísla los nodos y les da DNS por nombre.</td></tr>
+  <tr><td>host</td><td>El contenedor usa la pila de red del anfitrión, sin aislamiento.</td><td>No: los dos nodos chocarían en el mismo puerto.</td></tr>
+  <tr><td>overlay</td><td>Une contenedores de varios anfitriones (Swarm).</td><td>No: todo corre en un solo equipo.</td></tr>
+  <tr><td>none</td><td>Sin red, solo interfaz de bucle local.</td><td>No: los nodos deben hablar.</td></tr>
+</table>
+<p>Elijo una red <b>bridge definida por el usuario</b>, llamada <code>mensajero-red</code>.</p>
+
+<p class="q">A.6 ¿Cómo se encuentran dos contenedores por nombre? Papel del DNS interno</p>
+<p>En una red definida por el usuario, Docker ejecuta un servidor DNS embebido (en <code>127.0.0.11</code> dentro de cada contenedor) que resuelve el nombre del servicio o contenedor a su IP en esa red [7]. Por eso el nodo A se conecta a <code>ws://nodo-b:8080/nodo</code> y no a una IP fija: si el contenedor se recrea y cambia de IP, el nombre sigue funcionando.</p>
+
+<p class="q">A.7 Exponer frente a publicar un puerto</p>
+<p><b>Exponer</b> (<code>EXPOSE</code>) solo documenta en qué puerto escucha el contenedor; no abre nada hacia el anfitrión. <b>Publicar</b> (<code>-p 8081:8080</code> o <code>ports:</code> en Compose) crea la regla para que el anfitrión reenvíe su puerto 8081 al 8080 del contenedor [6][8]. Entre contenedores de la misma red no hace falta publicar: se hablan directamente por el puerto interno.</p>
+
+<p class="q">A.8 ¿Qué resuelve Docker Compose?</p>
+<p>Compose describe una aplicación de varios contenedores en un archivo YAML (la Compose Specification [9]) y la levanta con un comando. Se declaran <b>servicios</b> (<code>services:</code> con <code>build</code>, <code>ports</code>, <code>environment</code>, <code>healthcheck</code>), <b>redes</b> (<code>networks:</code>), <b>variables de entorno</b> (<code>environment:</code> o archivo <code>.env</code>) y <b>volúmenes</b> (<code>volumes:</code>, para datos que deben sobrevivir al contenedor). En este proyecto cada servicio recibe por variable su nombre (<code>NODO_NOMBRE</code>) y la dirección de su par (<code>PAR_URL</code>).</p>
+
+<h2>Bloque B. Comunicación en tiempo real</h2>
+
+<p class="q">B.1 ¿Qué es WebRTC, qué resuelve y quién lo especifica?</p>
+<p>WebRTC es un conjunto de API de navegador y protocolos que permite enviar audio, video y datos <b>directamente entre navegadores</b>, con baja latencia y cifrado obligatorio, sin plugins [10][11]. Resuelve la comunicación en tiempo real entre pares que normalmente están detrás de NAT. La API JavaScript la especifica el <b>W3C</b> (WebRTC 1.0 [10], Media Capture and Streams [16]) y los protocolos los especifica el <b>IETF</b> (grupo RTCWEB, RFC 8825 y relacionados [11]).</p>
+
+<p class="q">B.2 ¿Por qué necesita un servidor de señalización?</p>
+<p>Antes de hablar directamente, los dos navegadores no saben uno del otro: no conocen la IP, los puertos ni los códecs del otro. WebRTC <b>no define</b> cómo intercambiar esa información [12]; cada aplicación usa su propio canal. Por él viajan: la presencia (quién está conectado), la oferta y la respuesta SDP, los candidatos ICE y los avisos de control (llamar, colgar). Los medios y los archivos no pasan por él.</p>
+
+<p class="q">B.3 SDP, oferta y respuesta. Pasos para establecer una sesión</p>
+<p>SDP (Session Description Protocol, RFC 8866 [13]) es un texto que describe una sesión: medios, códecs, parámetros de cifrado (huella DTLS) y candidatos. El modelo <b>oferta/respuesta</b> (RFC 3264 [14], aplicado a WebRTC por JSEP, RFC 9429 [12]) consiste en que un lado propone y el otro acepta lo que soporta. Pasos:</p>
+<ol>
+  <li>A obtiene sus medios (<code>getUserMedia</code>) y crea un <code>RTCPeerConnection</code> con sus pistas.</li>
+  <li>A llama <code>createOffer()</code> y <code>setLocalDescription(oferta)</code>, y envía la oferta por la señalización.</li>
+  <li>B llama <code>setRemoteDescription(oferta)</code>, luego <code>createAnswer()</code> y <code>setLocalDescription(respuesta)</code>, y la envía.</li>
+  <li>A aplica <code>setRemoteDescription(respuesta)</code>.</li>
+  <li>Mientras tanto, cada lado envía sus candidatos ICE a medida que los descubre (<i>trickle ICE</i>, RFC 8838 [15]) y el otro los agrega con <code>addIceCandidate()</code>.</li>
+  <li>ICE prueba pares de candidatos; con el primero que funciona se hace el saludo DTLS, se derivan las claves SRTP y empiezan a fluir audio y video cifrados.</li>
+</ol>
+
+<p class="q">B.4 ICE, STUN y TURN. ¿Cuándo se necesita cada uno?</p>
+<table>
+  <tr><th>Protocolo</th><th>Qué hace</th><th>Escenario</th></tr>
+  <tr><td>ICE (RFC 8445 [17])</td><td>Reúne candidatos (direcciones posibles) y prueba pares hasta encontrar uno que funcione.</td><td>Siempre: es el mecanismo base de WebRTC.</td></tr>
+  <tr><td>STUN (RFC 8489 [18])</td><td>Un servidor le dice al cliente con qué IP y puerto públicos lo ve (candidato <i>srflx</i>).</td><td>Pares en redes distintas detrás de NAT "amigables".</td></tr>
+  <tr><td>TURN (RFC 8656 [19])</td><td>Servidor que <b>retransmite</b> el tráfico cuando la conexión directa es imposible (candidato <i>relay</i>).</td><td>NAT simétrico o cortafuegos que bloquean UDP. Gasta ancho de banda del servidor.</td></tr>
+</table>
+<p>En este laboratorio los dos navegadores corren en el mismo equipo, así que bastan los candidatos <i>host</i>. Se dejará configurado un STUN público y, como opcional, un TURN con coturn.</p>
+
+<p class="q">B.5 ¿Qué es NAT y por qué complica la conexión directa?</p>
+<p>NAT (RFC 3022 [20]) permite que muchos equipos con IP privada salgan a Internet con una sola IP pública, reescribiendo direcciones y puertos. El problema es que el router <b>solo deja entrar respuestas</b> a conexiones iniciadas desde dentro: un equipo externo no puede iniciar la conexión hacia una IP privada. Además, cada NAT asigna puertos con reglas distintas (RFC 4787 [21]); en el NAT simétrico el puerto cambia según el destino y el candidato obtenido por STUN deja de servir, por eso se necesita TURN.</p>
+
+<h2>Bloque C. Canal de señalización</h2>
+
+<p class="q">C.1 ¿Qué es WebSocket y en qué se diferencia de HTTP con peticiones periódicas?</p>
+<p>WebSocket (RFC 6455 [22]) empieza como una petición HTTP con cabecera <code>Upgrade</code> y, si el servidor acepta, la misma conexión TCP se vuelve un canal <b>bidireccional y persistente</b> de mensajes. Con HTTP periódico (<i>polling</i>) el cliente pregunta cada cierto tiempo: cada pregunta repite cabeceras, añade latencia de hasta un periodo completo y genera tráfico aunque no haya novedades [23]. En la señalización el servidor debe <b>empujar</b> la oferta o un candidato al instante, por eso WebSocket es lo adecuado.</p>
+
+<p class="q">C.2 Alternativas para la señalización</p>
+<table>
+  <tr><th>Opción</th><th>Ventajas</th><th>Desventajas para este proyecto</th></tr>
+  <tr><td><b>WebSocket puro</b> (librería <code>ws</code>)</td><td>Estándar, bidireccional, mínimo; se prueba desde consola con <code>wscat</code>.</td><td>Hay que programar la reconexión y el enrutamiento.</td></tr>
+  <tr><td>Socket.IO [24]</td><td>Reconexión, salas y respaldo con <i>long polling</i> ya hechos.</td><td>Usa su propio protocolo sobre Engine.IO: un cliente WebSocket normal como <code>wscat</code> no puede hablarle; agrega dependencias.</td></tr>
+  <tr><td>SSE (Server-Sent Events) [25]</td><td>Simple, sobre HTTP normal.</td><td>Solo va del servidor al cliente; los envíos requieren otro canal (POST).</td></tr>
+  <tr><td>MQTT [26]</td><td>Publicar/suscribir muy eficiente, pensado para IoT.</td><td>Necesita un broker extra (p. ej. Mosquitto) y el navegador lo usaría sobre WebSocket de todos modos.</td></tr>
+</table>
+<p>Elijo <b>WebSocket puro</b> por ser estándar, liviano y demostrable desde la consola, que es justo lo que pide el primer avance.</p>
+
+<p class="q">C.3 Formato de los mensajes de señalización (propuesta)</p>
+<p>Mensajes JSON, uno por trama de texto. Todo mensaje lleva <code>tipo</code>; los dirigidos llevan <code>para</code>, y el servidor agrega <code>de</code>, <code>id</code>, <code>ts</code> y <code>nodo_origen</code> (así el cliente no puede suplantar a otro y el nodo que recibe un reenvío no lo devuelve).</p>
+<pre>{"tipo":"registro","usuario":"ana"}                        cliente -> nodo
+{"tipo":"registrado","usuario":"ana","nodo":"nodo-a"}      nodo -> cliente
+{"tipo":"presencia","usuarios":[{"usuario":"beto","nodo":"nodo-b"}]}
+{"tipo":"mensaje","para":"beto","texto":"hola"}             cliente -> nodo
+{"tipo":"mensaje","id":"7f3c…","de":"ana","para":"beto","texto":"hola",
+ "ts":"2026-11-18T23:10:05.120Z","nodo_origen":"nodo-a"}    nodo -> nodo -> cliente
+{"tipo":"oferta"|"respuesta","para":"beto","sdp":"v=0…"}
+{"tipo":"candidato","para":"beto","candidato":{…RTCIceCandidateInit…}}
+{"tipo":"colgar","para":"beto"}
+{"tipo":"error","motivo":"usuario 'carlos' no está conectado"}</pre>
+
+<h2>Bloque D. Medios: audio y video</h2>
+
+<p class="q">D.1 ¿Cómo accede el navegador a la cámara y al micrófono?</p>
+<p>Con <code>navigator.mediaDevices.getUserMedia({audio, video})</code>, que devuelve un <code>MediaStream</code> con pistas [16]. Restricciones: la API solo existe en un <b>contexto seguro</b> (HTTPS, o <code>http://localhost</code>, que el estándar considera "potencialmente confiable" [27]); el usuario debe conceder el permiso; y si lo niega, la promesa falla con <code>NotAllowedError</code>, que la interfaz debe mostrar. Si la página se abre por la IP del equipo con HTTP (no localhost), el navegador bloquea la cámara: en ese caso se servirá por HTTPS con un proxy inverso (Caddy).</p>
+
+<p class="q">D.2 ¿Por qué un contenedor no accede a la cámara? ¿Dónde ocurre la captura?</p>
+<p>Un contenedor solo ve los dispositivos que se le pasan explícitamente (<code>--device</code>), y en Windows además corre dentro de la MV de WSL 2, que no tiene la cámara USB del anfitrión [4]. No es un problema: en mi arquitectura <b>la captura ocurre en el navegador del anfitrión</b>; los contenedores solo sirven la página y hacen la señalización, y los medios van de navegador a navegador.</p>
+
+<p class="q">D.3 Códecs: qué son y cuáles negocian los navegadores</p>
+<p>Un códec (codificador-decodificador) comprime la señal para transmitirla y la reconstruye al recibirla; casi todos son <b>con pérdida</b> y aprovechan la redundancia espacial (dentro de un cuadro) y temporal (entre cuadros I, P y B). Por norma, todo navegador WebRTC debe soportar <b>VP8 y H.264</b> en video [28] y <b>Opus y G.711</b> en audio [29]; Chrome y Edge negocian además VP9 y AV1. La lista real del navegador se ve con <code>RTCRtpSender.getCapabilities("video")</code>. Partí de la lectura de MirrorFly [30] y la contrasté con las RFC y con el artículo técnico de AV1 [31]:</p>
+<table>
+  <tr><th>Códec</th><th>Compresión</th><th>CPU</th><th>Compatibilidad</th><th>Licencia</th></tr>
+  <tr><td>H.264 (AVC)</td><td>Base de referencia.</td><td>Baja; aceleración por hardware casi universal.</td><td>Obligatorio en WebRTC [28]; el más compatible.</td><td>Patentes en consorcio (Via LA); Cisco paga las regalías de su binario OpenH264.</td></tr>
+  <tr><td>VP8</td><td>Similar a H.264.</td><td>Baja.</td><td>Obligatorio en WebRTC [28].</td><td>Libre de regalías (Google, BSD).</td></tr>
+  <tr><td>VP9</td><td>Mejor que VP8/H.264 a igual calidad.</td><td>Media; hardware menos común.</td><td>Chrome, Edge y Firefox.</td><td>Libre de regalías (Google).</td></tr>
+  <tr><td>AV1</td><td>La mejor: del orden de 30 % menos bits que VP9 en las pruebas del equipo de desarrollo [31].</td><td>Alta para codificar sin hardware.</td><td>Navegadores recientes; dispositivos viejos no lo aceleran.</td><td>Libre de regalías (Alliance for Open Media).</td></tr>
+  <tr><td>Opus (audio)</td><td>Voz y música de 6 a 510 kbit/s, adaptable [32].</td><td>Baja.</td><td>Obligatorio en WebRTC [29].</td><td>Libre (BSD, IETF).</td></tr>
+</table>
+<p>Decisión: dejar que el navegador negocie (normalmente VP8 o H.264 con Opus), porque los dos navegadores del laboratorio son iguales y estos códecs consumen poca CPU, algo importante con dos navegadores y Docker en el mismo equipo.</p>
+
+<p class="q">D.4 ¿Qué ancho de banda requiere una videollamada?</p>
+<p>Depende del códec y del movimiento en escena, porque WebRTC adapta la tasa de bits a la red. Como referencia, la documentación de Zoom pide unos 0,6 Mbit/s por sentido para video de calidad normal y 1,2 Mbit/s para 720p [33]. Estimación para este proyecto, por sentido: <b>480p ≈ 0,5 a 1 Mbit/s</b> y <b>720p ≈ 1,2 a 2,5 Mbit/s</b>, más unos 32 a 64 kbit/s de audio Opus. En la fase 3 lo mediré con <code>RTCPeerConnection.getStats()</code>.</p>
+
+<h2>Bloque E. Transferencia de archivos y texto</h2>
+
+<p class="q">E.1 ¿Qué es un RTCDataChannel? Confiable frente a no confiable</p>
+<p>Es un canal de datos arbitrarios entre pares que viaja por SCTP sobre DTLS sobre UDP, dentro de la misma conexión ICE de la llamada (RFC 8831 [34]). Por defecto es <b>confiable y ordenado</b> (como TCP: retransmite lo perdido). Si se crea con <code>maxRetransmits</code> o <code>maxPacketLifeTime</code> pasa a <b>no confiable</b> (como UDP: lo que se pierde no se reenvía), útil para datos donde llegar tarde equivale a no llegar, como la posición en un juego. Para archivos y chat se usa el confiable.</p>
+
+<p class="q">E.2 ¿Por qué fragmentar un archivo grande y cómo controlar el búfer?</p>
+<p>Cada <code>send()</code> es un mensaje SCTP; los mensajes muy grandes no son interoperables entre navegadores, y la recomendación práctica es no pasar de 16 KiB [35]. Además, cargar 20 MB en un solo mensaje bloquea el canal y la memoria. Por eso el archivo se lee por trozos de 16 KiB (<code>Blob.slice</code>). Para no saturar, se revisa <code>bufferedAmount</code> (bytes pendientes en el canal) y, si pasa de un umbral (1 MiB), se pausa hasta el evento <code>bufferedamountlow</code>, configurado con <code>bufferedAmountLowThreshold</code> [10].</p>
+
+<p class="q">E.3 Alternativa: enviar el archivo por HTTP a través del servidor</p>
+<p>El emisor sube el archivo con un POST <code>multipart/form-data</code> y el receptor lo descarga del nodo. <b>Ventajas</b>: es sencillo, funciona aunque falle la conexión P2P y el receptor puede bajarlo después aunque no esté conectado. <b>Desventajas</b>: el archivo pasa dos veces por el servidor (más carga y almacenamiento), deja de ser de extremo a extremo (el nodo lo puede leer) y hay que gestionar límites de tamaño y borrado. Elijo el <b>DataChannel</b> por ser directo y cifrado entre pares, y dejo el HTTP como posible respaldo.</p>
+
+<p class="q">E.4 ¿Cómo verifica el receptor que el archivo llegó completo e íntegro?</p>
+<p>El emisor manda primero un mensaje de inicio con nombre, tamaño y huella <b>SHA-256</b> calculada con la Web Crypto API [36]. El receptor cuenta los bytes y, al recibir el mensaje de fin, une los fragmentos, calcula su propio SHA-256 y lo compara. Si el tamaño o la huella no coinciden, o el canal se cierra antes del fin, marca el archivo como interrumpido. DTLS ya protege cada paquete; el hash protege el archivo completo tras reensamblarlo.</p>
+
+<h2>Bloque F. Interfaz y servidor</h2>
+
+<p class="q">F.1 Lenguaje y framework del servidor</p>
+<p><b>Node.js 22 (LTS) con la librería <code>ws</code></b>. Node maneja miles de conexiones con un solo hilo y un bucle de eventos, ideal para un servidor que casi solo reenvía mensajes pequeños [37]; <code>ws</code> implementa RFC 6455 sin capas extra [38], y el mismo lenguaje (JavaScript) se usa en el navegador. Alternativa descartada: <b>Python con <code>websockets</code>/asyncio</b>, igual de capaz, pero obligaría a manejar dos lenguajes y su imagen Docker es más pesada.</p>
+
+<p class="q">F.2 Interfaz: HTML y JavaScript puro o framework</p>
+<p><b>HTML, CSS y JavaScript puro</b>. La interfaz es una sola pantalla y las API de WebRTC son del navegador; un framework (React, Vue) no aporta mucho y obliga a un paso de compilación. Alternativa descartada: React, por esa complejidad extra.</p>
+
+<p class="q">F.3 Bosquejo de la interfaz</p>
+<figure><img src="../uml/bosquejo_interfaz.png" style="width:72%"><figcaption>Figura 1. Video remoto y local, chat, botones de llamada y archivos con barra de progreso.</figcaption></figure>
+
+<h2>Bloque G. Arquitectura propuesta</h2>
+<p>Cada nodo es un contenedor con la misma imagen y un solo proceso Node.js que atiende, en el puerto 8080: archivos estáticos y <code>/salud</code> por HTTP, clientes por WebSocket en <code>/ws</code> y el otro nodo por WebSocket en <code>/nodo</code>. Cada usuario se conecta a <b>su</b> nodo; si el destinatario está en el otro nodo, el mensaje se reenvía por el enlace entre nodos, que se abre <b>por nombre</b> (<code>nodo-a</code>, <code>nodo-b</code>). El chat de texto viaja por la señalización (queda en los logs y funciona sin llamada); medios y archivos van de navegador a navegador con WebRTC. Las fuentes de los diagramas están en <code>docs/uml/</code>.</p>
+
+<figure><img src="../uml/componentes.png" style="width:92%"><figcaption>Figura 2. Diagrama de componentes: módulos del cliente, del nodo y sus interfaces.</figcaption></figure>
+<figure><img src="../uml/despliegue.png" style="width:74%"><figcaption>Figura 3. Diagrama de despliegue: nodos, red, navegadores y anfitrión, con protocolo y puerto.</figcaption></figure>
+<figure><img src="../uml/secuencia_mensaje_nodos.png" style="width:78%"><figcaption>Figura 4. Secuencia del primer avance: un mensaje de texto pasa de nodo-a a nodo-b.</figcaption></figure>
+<figure><img src="../uml/secuencia_llamada.png" style="width:86%"><figcaption>Figura 5. Secuencia del inicio de una videollamada: oferta, respuesta y candidatos ICE.</figcaption></figure>
+<figure><img src="../uml/secuencia_archivo.png" style="width:88%"><figcaption>Figura 6. Envío de un archivo por fragmentos con control del búfer y verificación SHA-256.</figcaption></figure>
+<figure><img src="../uml/estados_conexion.png" style="width:44%"><figcaption>Figura 7. Estados de la conexión entre pares y reacción de la interfaz.</figcaption></figure>
+
+<h3>Tecnologías elegidas</h3>
+<table>
+  <tr><th>Componente</th><th>Elección</th><th>Alternativa descartada y motivo</th></tr>
+  <tr><td>Plataforma de nodos</td><td>Docker + Docker Compose</td><td>Máquinas virtuales (VirtualBox + Vagrant): más memoria y arranque lento.</td></tr>
+  <tr><td>Imagen base</td><td><code>node:22-alpine</code></td><td><code>node:22</code> (Debian): varias veces más grande.</td></tr>
+  <tr><td>Red</td><td>Bridge definida por el usuario</td><td>Bridge por defecto: no resuelve nombres. Host: sin aislamiento.</td></tr>
+  <tr><td>Servidor</td><td>Node.js 22 + <code>ws</code></td><td>Python + <code>websockets</code>: segundo lenguaje e imagen más pesada.</td></tr>
+  <tr><td>Señalización</td><td>WebSocket con JSON propio</td><td>Socket.IO: protocolo propio, no se prueba con <code>wscat</code>.</td></tr>
+  <tr><td>Interfaz</td><td>HTML, CSS y JS puro</td><td>React: paso de compilación innecesario.</td></tr>
+  <tr><td>Medios</td><td>WebRTC, códecs negociados (VP8/H.264 + Opus)</td><td>Forzar AV1: más CPU sin aceleración.</td></tr>
+  <tr><td>Archivos</td><td>RTCDataChannel confiable, 16 KiB, SHA-256</td><td>Subida HTTP: pasa por el servidor y no es extremo a extremo.</td></tr>
+  <tr><td>NAT</td><td>STUN público; TURN con coturn opcional</td><td>Solo TURN: retransmite todo y gasta más.</td></tr>
+  <tr><td>HTTPS (fase 3)</td><td>Caddy como proxy inverso</td><td>Nginx: el certificado se configura a mano.</td></tr>
+  <tr><td>Diagramas</td><td>PlantUML (en Docker)</td><td>draw.io: el archivo fuente no se lee en texto.</td></tr>
+</table>
+
+<h3>Riesgos y mitigación</h3>
+<table>
+  <tr><th>Riesgo</th><th>Mitigación</th></tr>
+  <tr><td>El navegador bloquea la cámara si se abre por IP y no por localhost.</td><td>Usar <code>http://localhost:8081</code> y <code>:8082</code>; para otro equipo, Caddy con HTTPS.</td></tr>
+  <tr><td>Un nodo arranca antes que el otro y el enlace falla.</td><td>Reintento automático cada 2 s y <code>healthcheck</code> en Compose.</td></tr>
+  <tr><td>Un nodo se cae a mitad de una conversación.</td><td>Los clientes reciben la presencia actualizada; el otro nodo lo registra y reintenta.</td></tr>
+  <tr><td>El cortafuegos de Windows bloquea UDP entre redes distintas.</td><td>Pruebas en el mismo equipo; TURN (coturn) como opción.</td></tr>
+  <tr><td>Un archivo de 20 MB satura memoria o canal.</td><td>Fragmentos de 16 KiB y control con <code>bufferedAmount</code>.</td></tr>
+  <tr><td>Docker Desktop o WSL 2 no arrancan en el equipo de la sustentación.</td><td>Probar antes; grabar el video de demostración como respaldo.</td></tr>
+  <tr><td>Poco tiempo entre el seguimiento y la entrega final.</td><td>Dejar la señalización ya preparada para oferta, respuesta y candidatos desde la fase 2.</td></tr>
+</table>
+
+<h2>Referencias</h2>
+<ol class="ref">
+  <li>Docker Inc. "What is a container?" Documentación oficial de Docker. https://docs.docker.com/get-started/docker-concepts/the-basics/what-is-a-container/</li>
+  <li>Linux man-pages. namespaces(7) y cgroups(7). https://man7.org/linux/man-pages/man7/namespaces.7.html</li>
+  <li>W. Felter, A. Ferreira, R. Rajamony, J. Rubio. "An updated performance comparison of virtual machines and Linux containers". IEEE ISPASS, 2015.</li>
+  <li>Docker Inc. "Docker Desktop WSL 2 backend on Windows". https://docs.docker.com/desktop/features/wsl/</li>
+  <li>Docker Inc. "What is an image?" https://docs.docker.com/get-started/docker-concepts/the-basics/what-is-an-image/</li>
+  <li>Docker Inc. "Dockerfile reference". https://docs.docker.com/reference/dockerfile/</li>
+  <li>Docker Inc. "Networking overview" y "Bridge network driver". https://docs.docker.com/engine/network/</li>
+  <li>Docker Inc. "Port publishing and mapping". https://docs.docker.com/engine/network/port-publishing/</li>
+  <li>Compose Specification. https://compose-spec.io/ y https://docs.docker.com/reference/compose-file/</li>
+  <li>W3C. "WebRTC: Real-Time Communication in Browsers" (Recomendación). https://www.w3.org/TR/webrtc/</li>
+  <li>H. Alvestrand. RFC 8825, "Overview: Real-Time Protocols for Browser-Based Applications". IETF, 2021.</li>
+  <li>J. Uberti, C. Jennings, E. Rescorla. RFC 9429, "JavaScript Session Establishment Protocol (JSEP)". IETF, 2024.</li>
+  <li>A. Begen et al. RFC 8866, "SDP: Session Description Protocol". IETF, 2021.</li>
+  <li>J. Rosenberg, H. Schulzrinne. RFC 3264, "An Offer/Answer Model with SDP". IETF, 2002.</li>
+  <li>E. Ivov et al. RFC 8838, "Trickle ICE". IETF, 2021.</li>
+  <li>W3C. "Media Capture and Streams". https://www.w3.org/TR/mediacapture-streams/</li>
+  <li>A. Keranen, C. Holmberg, J. Rosenberg. RFC 8445, "Interactive Connectivity Establishment (ICE)". IETF, 2018.</li>
+  <li>M. Petit-Huguenin et al. RFC 8489, "Session Traversal Utilities for NAT (STUN)". IETF, 2020.</li>
+  <li>T. Reddy et al. RFC 8656, "Traversal Using Relays around NAT (TURN)". IETF, 2020.</li>
+  <li>P. Srisuresh, K. Egevang. RFC 3022, "Traditional IP Network Address Translator". IETF, 2001.</li>
+  <li>F. Audet, C. Jennings. RFC 4787, "NAT Behavioral Requirements for Unicast UDP". IETF, 2007.</li>
+  <li>I. Fette, A. Melnikov. RFC 6455, "The WebSocket Protocol". IETF, 2011.</li>
+  <li>S. Loreto et al. RFC 6202, "Known Issues and Best Practices for the Use of Long Polling and Streaming in Bidirectional HTTP". IETF, 2011.</li>
+  <li>Socket.IO. "How it works" (documentación oficial). https://socket.io/docs/v4/how-it-works/</li>
+  <li>WHATWG. HTML Living Standard, sección "Server-sent events". https://html.spec.whatwg.org/multipage/server-sent-events.html</li>
+  <li>OASIS. "MQTT Version 5.0" (estándar OASIS), 2019.</li>
+  <li>W3C. "Secure Contexts". https://www.w3.org/TR/secure-contexts/</li>
+  <li>A. B. Roach. RFC 7742, "WebRTC Video Processing and Codec Requirements". IETF, 2016.</li>
+  <li>JM. Valin, C. Bran. RFC 7874, "WebRTC Audio Codec and Processing Requirements". IETF, 2016.</li>
+  <li>MirrorFly. "Video codecs" (blog de proveedor, usado como punto de partida). https://www.mirrorfly.com/blog/</li>
+  <li>Y. Chen et al. "An Overview of Core Coding Tools in the AV1 Video Codec". Picture Coding Symposium (PCS), 2018.</li>
+  <li>JM. Valin, K. Vos, T. Terriberry. RFC 6716, "Definition of the Opus Audio Codec". IETF, 2012.</li>
+  <li>Zoom. "Zoom system requirements: Windows, macOS, Linux", sección de ancho de banda. https://support.zoom.com/</li>
+  <li>R. Jesup, S. Loreto, M. Tüxen. RFC 8831, "WebRTC Data Channels". IETF, 2021.</li>
+  <li>MDN Web Docs. "Using WebRTC data channels", sección sobre tamaño de mensajes. https://developer.mozilla.org/docs/Web/API/WebRTC_API/Using_data_channels</li>
+  <li>W3C. "Web Cryptography API" (SubtleCrypto.digest). https://www.w3.org/TR/WebCryptoAPI/</li>
+  <li>OpenJS Foundation. "The Node.js Event Loop". https://nodejs.org/en/learn/asynchronous-work/event-loop-timers-and-nexttick</li>
+  <li>Proyecto ws. "ws: a Node.js WebSocket library". https://github.com/websockets/ws</li>
+</ol>
+
+</body>
+</html>

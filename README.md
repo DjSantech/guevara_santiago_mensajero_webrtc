@@ -9,6 +9,6 @@ Mensajero web en el que dos usuarios intercambian texto, audio, video y archivos
 
 | Fase | Contenido | Estado |
 |---|---|---|
-| 1. Investigación | Informe en `docs/informe/` y diagramas en `docs/uml/` | En curso |
+| 1. Investigación | Informe en `docs/informe/informe_investigacion.pdf` y diagramas en `docs/uml/` | Entregado |
 | 2. Primer avance sin interfaz | Dos nodos, señalización y mensajes por consola | Pendiente |
 | 3. Interfaz, medios y archivos | Chat web, videollamada y archivos | Pendiente |
