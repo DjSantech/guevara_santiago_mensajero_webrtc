@@ -1,0 +1,45 @@
+@startuml secuencia_llamada
+' Fase 3: inicio de una videollamada (señalización, oferta, respuesta y candidatos ICE)
+title Secuencia - inicio de una videollamada
+skinparam shadowing false
+skinparam defaultFontSize 12
+autonumber
+
+actor Ana
+participant "Navegador A" as A
+participant "nodo-a" as NA
+participant "nodo-b" as NB
+participant "Navegador B" as B
+actor Beto
+
+Ana -> A : clic en "Llamar"
+A -> A : getUserMedia({audio, video})
+A -> A : new RTCPeerConnection(iceServers)\naddTrack(pistas locales)
+A -> A : createOffer() y\nsetLocalDescription(oferta)
+A -> NA : {"tipo":"oferta","para":"beto","sdp":...}
+NA -> NB : reenvío por el enlace entre nodos
+NB -> B : {"tipo":"oferta","de":"ana","sdp":...}
+B -> Beto : "Ana te está llamando"
+Beto -> B : clic en "Contestar"
+B -> B : getUserMedia, new RTCPeerConnection,\nsetRemoteDescription(oferta)
+B -> B : createAnswer() y\nsetLocalDescription(respuesta)
+B -> NB : {"tipo":"respuesta","para":"ana","sdp":...}
+NB -> NA : reenvío
+NA -> A : {"tipo":"respuesta","de":"beto","sdp":...}
+A -> A : setRemoteDescription(respuesta)
+
+par candidatos de A hacia B (trickle ICE)
+  A -> NA : {"tipo":"candidato","para":"beto",...}
+  NA -> NB : reenvío
+  NB -> B : addIceCandidate()
+else candidatos de B hacia A
+  B -> NB : {"tipo":"candidato","para":"ana",...}
+  NB -> NA : reenvío
+  NA -> A : addIceCandidate()
+end
+
+A <-> B : comprobaciones de conectividad ICE (STUN sobre UDP)
+A <-> B : saludo DTLS y derivación de claves SRTP
+A <-> B : audio y video cifrados (SRTP)
+note over NA, NB : Los medios no pasan por los nodos:\nsolo la señalización.
+@enduml

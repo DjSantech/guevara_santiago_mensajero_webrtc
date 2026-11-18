@@ -1,0 +1,25 @@
+@startsalt bosquejo_interfaz
+' Bosquejo de la interfaz web (Bloque F), en notación Salt de PlantUML
+title Bosquejo de la interfaz web
+{+
+  { <b>Mensajero WebRTC | Conectado como: ana | Beto: en línea }
+  {
+    {+
+      <b>Video remoto (Beto)
+      .
+      .
+      .
+      .
+      [Video local (ana)]
+    } | {+
+      <b>Chat
+      [beto 10:01] hola
+      [yo 10:02] ¿hacemos la llamada?
+      .
+      { "Escribe un mensaje        " | [Enviar] }
+    }
+  }
+  { [Llamar] | [Colgar] | [Silenciar micrófono] | [Apagar cámara] | [Enviar archivo] }
+  { Enviando video.mp4: 62 % }
+}
+@endsalt

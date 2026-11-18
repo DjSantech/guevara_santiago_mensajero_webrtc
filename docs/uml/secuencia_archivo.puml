@@ -1,0 +1,41 @@
+@startuml secuencia_archivo
+' Fase 3: envío de un archivo por fragmentos sobre un RTCDataChannel confiable
+title Secuencia - envío de un archivo por fragmentos
+skinparam shadowing false
+skinparam defaultFontSize 12
+autonumber
+
+actor Ana
+participant "Navegador A\n(módulo de archivos)" as A
+participant "RTCDataChannel 'archivos'\n(confiable y ordenado)" as DC
+participant "Navegador B\n(módulo de archivos)" as B
+actor Beto
+
+Ana -> A : elige un archivo (p. ej. video.mp4, 25 MB)
+A -> A : calcula SHA-256\n(crypto.subtle.digest)
+A -> DC : {"tipo":"inicio","id","nombre","tamano","sha256"}
+DC -> B : inicio
+B -> B : prepara la lista de fragmentos
+
+loop por cada fragmento de 16 KiB
+  alt bufferedAmount > 1 MiB
+    A -> A : espera el evento bufferedamountlow
+  end
+  A -> DC : send(fragmento binario)
+  DC -> B : fragmento
+  B -> B : guarda el fragmento y\nactualiza la barra de progreso
+end
+
+A -> DC : {"tipo":"fin","id"}
+DC -> B : fin
+B -> B : une los fragmentos en un Blob\ny calcula su SHA-256
+alt tamaño y SHA-256 coinciden
+  B -> DC : {"tipo":"recibido","id","ok":true}
+  B -> Beto : enlace para abrir o descargar
+else no coinciden, o el canal se cerró antes del fin
+  B -> DC : {"tipo":"recibido","id","ok":false}
+  B -> Beto : "archivo incompleto o dañado"
+end
+DC -> A : confirmación
+A -> Ana : "entregado" o "falló"
+@enduml

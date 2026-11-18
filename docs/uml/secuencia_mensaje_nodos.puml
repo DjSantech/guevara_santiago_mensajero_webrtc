@@ -1,0 +1,29 @@
+@startuml secuencia_mensaje_nodos
+' Fase 2: un mensaje de texto viaja de un cliente del nodo A a un cliente del nodo B
+title Secuencia - mensaje de texto entre nodos (primer avance, sin interfaz)
+skinparam shadowing false
+skinparam defaultFontSize 12
+autonumber
+
+actor "Ana\n(consola)" as ANA
+participant "nodo-a\n:8080" as NA
+participant "nodo-b\n:8080" as NB
+actor "Beto\n(consola)" as BETO
+
+== Arranque (docker compose up) ==
+NA -> NB : conecta a ws://nodo-b:8080/nodo\n(reintenta cada 2 s hasta que responda)
+NB -> NA : conecta a ws://nodo-a:8080/nodo
+
+== Registro de usuarios ==
+ANA -> NA : {"tipo":"registro","usuario":"ana"}
+NA -> NB : {"tipo":"presencia","usuarios":["ana"]}
+BETO -> NB : {"tipo":"registro","usuario":"beto"}
+NB -> NA : {"tipo":"presencia","usuarios":["beto"]}
+
+== Mensaje ==
+ANA -> NA : {"tipo":"mensaje","para":"beto","texto":"hola"}
+NA -> NA : beto no está en este nodo:\nsegún el directorio, está en nodo-b
+NA -> NB : el mismo mensaje con\n"de":"ana" y "nodo_origen":"nodo-a"
+NB -> BETO : {"tipo":"mensaje","de":"ana","texto":"hola"}
+note over NA, NB : Cada nodo deja una línea en su log:\nnodo-a REENVIADO, nodo-b ENTREGADO
+@enduml

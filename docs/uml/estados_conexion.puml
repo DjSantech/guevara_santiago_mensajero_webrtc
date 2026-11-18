@@ -1,0 +1,22 @@
+@startuml estados_conexion
+' Estados de RTCPeerConnection.connectionState (W3C WebRTC 1.0) y cómo los usará la interfaz
+title Estados de la conexión entre pares (connectionState)
+skinparam shadowing false
+skinparam defaultFontSize 12
+
+[*] --> new : new RTCPeerConnection()
+new --> connecting : intercambio de SDP\ny candidatos ICE
+connecting --> connected : ICE y DTLS completos
+connecting --> failed : ningún par de\ncandidatos funciona
+connected --> disconnected : se pierde la\nconectividad
+disconnected --> connected : se recupera sola
+disconnected --> failed : no se recupera
+failed --> connecting : reinicio de ICE\n(restartIce)
+connected --> closed : colgar (close())
+failed --> closed
+closed --> [*]
+
+connected : la interfaz muestra la llamada
+disconnected : aviso "conexión inestable"
+failed : aviso "no fue posible conectar"
+@enduml

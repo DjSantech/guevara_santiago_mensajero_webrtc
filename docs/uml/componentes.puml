@@ -1,0 +1,54 @@
+@startuml componentes
+' Diagrama de componentes del mensajero (Bloque G)
+title Diagrama de componentes - Mensajero WebRTC
+skinparam componentStyle uml2
+skinparam shadowing false
+skinparam defaultFontSize 12
+
+package "Navegador (cliente web)" {
+  [Interfaz web\n(HTML, CSS, JS)] as UI
+  [Módulo de señalización\n(WebSocket)] as MSEN
+  [Módulo de captura de medios\n(getUserMedia)] as MMED
+  [Módulo de conexión entre pares\n(RTCPeerConnection)] as MCON
+  [Módulo de chat] as MCHAT
+  [Módulo de archivos\n(RTCDataChannel)] as MARCH
+}
+
+package "Nodo (contenedor Docker, Node.js)" {
+  [Servidor HTTP\n(estáticos, /salud, /usuarios)] as HTTP
+  [Servidor de señalización\n(WebSocket /ws)] as SEN
+  [Enlace entre nodos\n(WebSocket /nodo)] as ENL
+  [Directorio de usuarios] as DIR
+  [Registro de eventos\n(logs en stdout)] as LOG
+}
+
+node "Nodo par\n(misma imagen)" as PAR
+
+interface "HTTP GET" as I_HTTP
+interface "WS /ws (JSON)" as I_WS
+interface "WS /nodo (JSON)" as I_NODO
+interface "SRTP / SCTP sobre UDP\n(hacia el otro navegador)" as I_P2P
+
+HTTP -- I_HTTP
+SEN -- I_WS
+ENL -- I_NODO
+MCON -- I_P2P
+
+UI ..> I_HTTP : carga la página
+UI ..> MCHAT
+UI ..> MARCH
+UI ..> MMED
+UI ..> MCON
+MCHAT ..> MSEN : texto
+MCON ..> MSEN : SDP y candidatos ICE
+MCON ..> MMED : pistas de audio y video
+MARCH ..> MCON : canal de datos
+MSEN ..> I_WS : registro, mensaje, oferta,\nrespuesta, candidato
+
+SEN ..> DIR : ¿usuario local o remoto?
+SEN ..> ENL : reenviar al otro nodo
+ENL ..> PAR : ws://nodo-par:8080/nodo
+PAR ..> I_NODO
+SEN ..> LOG
+ENL ..> LOG
+@enduml

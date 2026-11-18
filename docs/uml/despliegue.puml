@@ -1,0 +1,33 @@
+@startuml despliegue
+' Diagrama de despliegue: dos contenedores Docker en una red bridge definida por el usuario
+title Diagrama de despliegue - dos nodos Docker
+skinparam shadowing false
+skinparam defaultFontSize 12
+
+node "Equipo anfitrión (Windows 11)" as HOST {
+  node "Navegador A\n(Chrome o Edge)" as NA
+  node "Navegador B\n(otra ventana o perfil)" as NB
+  node "Cámara y micrófono\n(USB / integrados)" as CAM
+
+  node "Docker Desktop (Docker Engine sobre WSL 2)" as DOCKER {
+    frame "Red bridge definida por el usuario: mensajero-red" as RED {
+      node "<<contenedor>>\nnodo-a\nimagen node:22-alpine" as A {
+        artifact "servidor.js\nescucha 8080/TCP" as SA
+      }
+      node "<<contenedor>>\nnodo-b\nimagen node:22-alpine" as B {
+        artifact "servidor.js\nescucha 8080/TCP" as SB
+      }
+    }
+  }
+}
+
+cloud "Internet\n(STUN público, opcional)" as STUN
+
+NA --> SA : HTTP y WebSocket\nlocalhost:8081 -> 8080/TCP
+NB --> SB : HTTP y WebSocket\nlocalhost:8082 -> 8080/TCP
+SA <--> SB : WebSocket /nodo, 8080/TCP\npor nombre: nodo-a <-> nodo-b\n(DNS interno de Docker)
+NA <..> NB : WebRTC P2P (fase 3)\nSRTP y SCTP/DTLS sobre UDP\npuertos efímeros
+CAM ..> NA : getUserMedia
+CAM ..> NB : getUserMedia
+NA ..> STUN : STUN 19302/UDP\n(solo con redes distintas)
+@enduml
