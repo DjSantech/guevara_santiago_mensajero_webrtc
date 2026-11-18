@@ -4,7 +4,9 @@
   "description": "Nodo del mensajero WebRTC: servidor HTTP y de señalización por WebSocket",
   "main": "src/servidor.js",
   "scripts": {
-    "start": "node src/servidor.js"
+    "start": "node src/servidor.js",
+    "prueba": "node src/prueba-avance.js",
+    "cliente": "node src/cliente-consola.js"
   },
   "engines": {
     "node": ">=20"
