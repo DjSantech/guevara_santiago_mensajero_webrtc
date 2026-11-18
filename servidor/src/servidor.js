@@ -6,12 +6,22 @@
  *   - HTTP  GET /salud     -> estado del nodo en JSON (lo usa el healthcheck de Docker)
  *   - HTTP  GET /usuarios  -> usuarios conectados en JSON
  *   - WebSocket  /ws       -> clientes (navegador, wscat o el cliente de consola)
+ *   - WebSocket  /nodo     -> el otro nodo (enlace entre nodos)
  *
  * Mensajes que entiende por /ws (JSON, uno por trama):
  *   {"tipo":"registro","usuario":"ana"}
  *   {"tipo":"mensaje","para":"beto","texto":"hola"}
  *   {"tipo":"oferta"|"respuesta"|"candidato"|"colgar","para":"beto",...}  (señalización WebRTC, fase 3)
  *   {"tipo":"lista"}
+ *
+ * Mensajes que entiende por /nodo (los envía el nodo par):
+ *   {"tipo":"presencia","nodo":"nodo-b","usuarios":["beto"]}
+ *   {"tipo":"reenvio","mensaje":{...mensaje dirigido completo...}}
+ *
+ * Configuración por variables de entorno (las pone docker-compose.yml):
+ *   NODO_NOMBRE  nombre de este nodo (nodo-a)
+ *   PAR_URL      dirección del otro nodo por nombre (ws://nodo-b:8080/nodo)
+ *   PUERTO       puerto interno (8080)
  */
 
 const http = require('node:http');
@@ -22,8 +32,10 @@ const { WebSocketServer } = require('ws');
 
 const { log, NODO } = require('./registro');
 const { Directorio } = require('./directorio');
+const { EnlaceNodos } = require('./enlace');
 
 const PUERTO = Number(process.env.PUERTO || 8080);
+const PAR_URL = process.env.PAR_URL || '';
 const CARPETA_PUBLICA = path.join(__dirname, '..', 'public');
 
 // Tipos de mensaje que van dirigidos a otro usuario y que el nodo solo enruta.
@@ -32,6 +44,8 @@ const TIPOS_DIRIGIDOS = ['mensaje', 'oferta', 'respuesta', 'candidato', 'colgar'
 const NOMBRE_VALIDO = /^[a-zA-Z0-9_-]{1,20}$/;
 
 const directorio = new Directorio(NODO);
+// Al abrirse el enlace se le cuenta al par quién está conectado aquí.
+const enlace = new EnlaceNodos(PAR_URL, () => enviarPresenciaAlPar());
 
 // ---------------------------------------------------------------- HTTP
 
@@ -45,7 +59,9 @@ function responderJson(res, codigo, objeto) {
 function estadoNodo() {
   return {
     nodo: NODO,
-    usuarios_locales: directorio.nombresLocales(),
+    par: PAR_URL || null,
+    par_conectado: enlace.conectado,
+    usuarios: directorio.listaCompleta(),
   };
 }
 
@@ -80,10 +96,21 @@ function enviar(socket, objeto) {
   if (socket && socket.readyState === socket.OPEN) socket.send(JSON.stringify(objeto));
 }
 
-/** Avisa a todos los clientes locales quién está conectado. */
+/** Avisa a todos los clientes locales quién está conectado (en los dos nodos). */
 function difundirPresencia() {
   const aviso = { tipo: 'presencia', usuarios: directorio.listaCompleta() };
   for (const usuario of directorio.nombresLocales()) enviar(directorio.socketDe(usuario), aviso);
+}
+
+/** Le cuenta al nodo par qué usuarios están conectados en este nodo. */
+function enviarPresenciaAlPar() {
+  enlace.enviar({ tipo: 'presencia', nodo: NODO, usuarios: directorio.nombresLocales() });
+}
+
+/** Algo cambió en este nodo: se avisa a los clientes locales y al par. */
+function presenciaCambio() {
+  difundirPresencia();
+  enviarPresenciaAlPar();
 }
 
 /** Texto corto para el log: el texto del chat o solo el tipo (no se loguea el SDP completo). */
@@ -92,14 +119,26 @@ function resumen(m) {
 }
 
 /**
- * Lleva un mensaje dirigido a su destinatario.
- * En esta versión solo entrega a usuarios del mismo nodo.
+ * Lleva un mensaje dirigido a su destinatario:
+ *   - si está en este nodo, se lo entrega directamente;
+ *   - si está en el otro nodo, lo reenvía por el enlace entre nodos;
+ *   - si no está en ninguno, le devuelve un error a quien lo envió.
  */
 function enrutar(mensaje, socketOrigen) {
   const destino = directorio.dondeEsta(mensaje.para);
+
   if (destino === 'local') {
     enviar(directorio.socketDe(mensaje.para), mensaje);
     log('ENTREGADO', resumen(mensaje));
+    return;
+  }
+  if (destino) {
+    if (enlace.enviar({ tipo: 'reenvio', mensaje })) {
+      log('REENVIADO', `${resumen(mensaje)}  [hacia ${destino}]`);
+    } else {
+      log('ERROR', `enlace con ${destino} caído; no se pudo reenviar (${resumen(mensaje)})`);
+      enviar(socketOrigen, { tipo: 'error', motivo: `el nodo ${destino} no está disponible` });
+    }
     return;
   }
   log('ERROR', `${mensaje.para} no está conectado (${resumen(mensaje)})`);
@@ -119,7 +158,7 @@ function registrar(socket, mensaje) {
   directorio.agregarLocal(usuario, socket);
   log('REGISTRO', `${usuario} se conectó`);
   enviar(socket, { tipo: 'registrado', usuario, nodo: NODO });
-  difundirPresencia();
+  presenciaCambio();
 }
 
 /** Procesa cada mensaje que llega de un cliente. */
@@ -152,6 +191,47 @@ function alCerrarCliente(socket) {
   if (!socket.usuario) return;
   directorio.quitarLocal(socket.usuario);
   log('SALIDA', `${socket.usuario} se desconectó`);
+  presenciaCambio();
+}
+
+// ---------------------------------------------------------------- Nodo par (conexión entrante /nodo)
+
+/** Procesa lo que envía el otro nodo. */
+function alMensajeDelPar(socket, datos) {
+  let mensaje;
+  try {
+    mensaje = JSON.parse(datos);
+  } catch {
+    return log('ERROR', 'el par envió algo que no es JSON');
+  }
+
+  if (mensaje.tipo === 'presencia') {
+    socket.nodo = mensaje.nodo;  // así se sabe de quién es esta conexión
+    directorio.reemplazarRemotos(mensaje.nodo, mensaje.usuarios || []);
+    log('PRESENCIA', `${mensaje.nodo} tiene conectados: [${(mensaje.usuarios || []).join(', ')}]`);
+    difundirPresencia();
+    return;
+  }
+
+  if (mensaje.tipo === 'reenvio') {
+    const m = mensaje.mensaje;
+    // Solo se entrega aquí: un mensaje que vino del par NUNCA se reenvía de vuelta (evita ciclos).
+    if (directorio.dondeEsta(m.para) === 'local') {
+      enviar(directorio.socketDe(m.para), m);
+      log('ENTREGADO', `${resumen(m)}  [desde ${m.nodo_origen}]`);
+    } else {
+      log('DESCARTADO', `${m.para} ya no está en este nodo (${resumen(m)})`);
+    }
+    return;
+  }
+  log('ERROR', `tipo desconocido desde el par: ${mensaje.tipo}`);
+}
+
+/** El otro nodo se cayó o se apagó: se olvidan sus usuarios. */
+function alCerrarPar(socket) {
+  if (!socket.nodo) return;
+  directorio.quitarRemotosDe(socket.nodo);
+  log('ENLACE', `${socket.nodo} cerró su conexión; sus usuarios quedan fuera de línea`);
   difundirPresencia();
 }
 
@@ -159,12 +239,15 @@ function alCerrarCliente(socket) {
 
 const servidorHttp = http.createServer(atenderHttp);
 const wsClientes = new WebSocketServer({ noServer: true });
+const wsNodos = new WebSocketServer({ noServer: true });
 
-// Las conexiones WebSocket llegan como un "upgrade" de HTTP; aquí se aceptan solo en /ws.
+// Las conexiones WebSocket llegan como un "upgrade" de HTTP; según la ruta van a clientes o a nodos.
 servidorHttp.on('upgrade', (req, socket, cabeza) => {
   const ruta = new URL(req.url, 'http://nodo').pathname;
   if (ruta === '/ws') {
     wsClientes.handleUpgrade(req, socket, cabeza, (ws) => wsClientes.emit('connection', ws));
+  } else if (ruta === '/nodo') {
+    wsNodos.handleUpgrade(req, socket, cabeza, (ws) => wsNodos.emit('connection', ws, req));
   } else {
     socket.destroy();
   }
@@ -175,7 +258,16 @@ wsClientes.on('connection', (socket) => {
   socket.on('close', () => alCerrarCliente(socket));
 });
 
-servidorHttp.listen(PUERTO, () => log('INICIO', `escuchando en el puerto ${PUERTO}`));
+wsNodos.on('connection', (socket, req) => {
+  log('ENLACE', `el par se conectó desde ${req.socket.remoteAddress}`);
+  socket.on('message', (datos) => alMensajeDelPar(socket, datos.toString()));
+  socket.on('close', () => alCerrarPar(socket));
+});
+
+servidorHttp.listen(PUERTO, () => {
+  log('INICIO', `escuchando en el puerto ${PUERTO}; par: ${PAR_URL || '(ninguno)'}`);
+  enlace.conectar();
+});
 
 // docker compose down envía SIGTERM: se cierra ordenadamente en vez de esperar 10 s.
 for (const senal of ['SIGTERM', 'SIGINT']) {
