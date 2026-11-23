@@ -6,7 +6,7 @@ Una entrada por sesión de trabajo: fecha, tiempo dedicado, qué se hizo, qué p
 
 ## Sesión 1. 2026-11-18. Investigación y arquitectura
 
-- **Tiempo dedicado:** (completar)
+- **Tiempo dedicado:** 2 horas
 - **Qué se hizo:**
   - Leí el enunciado del laboratorio y la transcripción de la clase del 12 de noviembre (códecs H.264, VP9, AV1 y la lectura de MirrorFly).
   - Elegí Docker como plataforma de los nodos y escribí el informe de investigación (bloques A a G) con fuentes: RFC del IETF, especificaciones del W3C y del WHATWG, documentación oficial de Docker y Node.js, y dos artículos (Felter et al. 2015; Chen et al. 2018).
@@ -22,7 +22,7 @@ Una entrada por sesión de trabajo: fecha, tiempo dedicado, qué se hizo, qué p
 
 ## Sesión 2. 2026-11-18. Primer avance sin interfaz
 
-- **Tiempo dedicado:** (completar)
+- **Tiempo dedicado:** 2 horas
 - **Qué se hizo** (en el orden de los commits, después de subir el informe):
   1. Servidor de un nodo en Node.js con la librería `ws`: HTTP (`/`, `/salud`, `/usuarios`), WebSocket `/ws` para clientes y directorio de usuarios. Lo probé con dos clientes en el mismo nodo.
   2. Enlace entre nodos (`enlace.js`): cada nodo abre una conexión WebSocket hacia el otro por nombre (`PAR_URL`), comparte su lista de usuarios (presencia) y reenvía los mensajes cuyo destinatario está en el otro nodo. Lo probé con dos nodos en local (puertos 9091 y 9092) antes de pasarlo a Docker.
