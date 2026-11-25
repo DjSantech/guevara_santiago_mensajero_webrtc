@@ -25,8 +25,13 @@
   App.alPista = [];         // funciones(usuario, evento) para cuando llega audio o video
   App.alCanal = [];         // funciones(par, canal) para cuando hay un canal de datos nuevo
 
-  /** Devuelve la conexión con "otro"; si no existe, la crea. */
-  App.obtenerPar = (otro) => {
+  /**
+   * Devuelve la conexión con "otro"; si no existe, la crea.
+   * Quien la crea por iniciativa propia (llamar o enviar un archivo) abre también el
+   * canal de datos "archivos" en ese momento. Así el canal queda negociado desde la
+   * primera oferta y nunca hay que agregarlo en medio de una llamada.
+   */
+  App.obtenerPar = (otro, iniciador = false) => {
     if (pares.has(otro)) return pares.get(otro);
 
     const pc = new RTCPeerConnection(CONFIGURACION);
@@ -68,6 +73,11 @@
         App.mostrarAviso(`La conexión con ${otro} está inestable…`);
       }
     };
+
+    if (iniciador) {
+      const canal = pc.createDataChannel('archivos', { ordered: true });
+      App.alCanal.forEach((f) => f(par, canal));
+    }
     return par;
   };
 
@@ -118,8 +128,25 @@
     }
   }
 
-  App.on('oferta', alDescripcion);
-  App.on('respuesta', alDescripcion);
-  App.on('candidato', alCandidato);
-  App.alDesconectarse.push((usuario) => App.cerrarPar(usuario));
+  /**
+   * Los mensajes de señalización de cada usuario se procesan EN ORDEN, de a uno.
+   * Sin esta cola, una oferta nueva podía llegar mientras todavía se aplicaba la
+   * respuesta anterior; el navegador seguía en "have-local-offer", lo tomaba como
+   * choque y el lado no cortés la ignoraba: el canal de archivos nunca se abría.
+   */
+  const colas = new Map();   // usuario -> promesa del último mensaje en proceso
+  function enCola(manejador) {
+    return (m) => {
+      const anterior = colas.get(m.de) || Promise.resolve();
+      colas.set(m.de, anterior.then(() => manejador(m)));
+    };
+  }
+
+  App.on('oferta', enCola(alDescripcion));
+  App.on('respuesta', enCola(alDescripcion));
+  App.on('candidato', enCola(alCandidato));
+  App.alDesconectarse.push((usuario) => {
+    App.cerrarPar(usuario);
+    colas.delete(usuario);
+  });
 })();

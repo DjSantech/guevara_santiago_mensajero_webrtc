@@ -62,10 +62,11 @@
     };
   }
 
-  /** Espera hasta que el canal con "otro" esté abierto (máx. 15 s). Lo crea si no existe. */
+  /** Espera hasta que el canal con "otro" esté abierto (máx. 15 s). */
   function canalAbierto(otro) {
-    const par = App.obtenerPar(otro);
+    const par = App.obtenerPar(otro, true);   // si la conexión es nueva, nace con su canal
     if (!par.canal || par.canal.readyState === 'closed') {
+      // Caso raro: conexión sin canal o con el canal cerrado. Se abre uno nuevo.
       configurarCanal(par, par.pc.createDataChannel('archivos', { ordered: true }));   // dispara la negociación
     }
     return new Promise((resolver, rechazar) => {

@@ -91,6 +91,17 @@ try {
     ok('apagar cámara apaga la pista de video', await A.ev(`!App.pistaLocal('video').enabled`));
     await B.ev(`document.getElementById('colgar').click(); true`);
     ok('al colgar beto, ana cierra la llamada', await esperar(A, `document.getElementById('videos').hidden && document.getElementById('colgar').disabled`));
+
+    // Segunda llamada: ahora cuelga ana y envía un archivo EN SEGUIDA, mientras los dos renegocian.
+    // (Caso de un error real ya corregido: la oferta se ignoraba y el canal nunca se abría.)
+    await A.ev(`document.getElementById('llamar').click(); true`);
+    await esperar(B, `!document.getElementById('entrante').hidden`);
+    await B.ev(`document.getElementById('contestar').click(); true`);
+    await esperar(A, `document.getElementById('remoto').videoWidth>0`, 20000);
+    await A.ev(`document.getElementById('colgar').click();
+      const dt=new DataTransfer(); dt.items.add(new File([new Uint8Array(300000)],'justo_al_colgar.bin'));
+      document.getElementById('archivo').files=dt.files; document.getElementById('enviar-archivo').click(); true`);
+    ok('archivo enviado justo al colgar llega igual', await esperar(B, `document.getElementById('mensajes').textContent.includes('justo_al_colgar.bin')`, 30000));
   }
 
   if (FASE === 'archivos' || FASE === 'todo') {

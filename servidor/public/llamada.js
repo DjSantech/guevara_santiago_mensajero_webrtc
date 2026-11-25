@@ -8,7 +8,14 @@
  *   3. Cada uno agrega sus pistas de audio y video a la conexión (addTrack);
  *      eso dispara la negociación de webrtc.js (oferta, respuesta y candidatos).
  *   4. Cuando llegan las pistas del otro (evento "track"), se muestran en el video remoto.
- *   5. "Colgar" detiene la cámara y el micrófono, quita las pistas y avisa con {"tipo":"colgar"}.
+ *   5. "Colgar" detiene la cámara y el micrófono, deja de enviarlas con
+ *      replaceTrack(null) y avisa con {"tipo":"colgar"}.
+ *
+ * Por qué replaceTrack y no removeTrack: removeTrack obliga a renegociar en los
+ * dos navegadores a la vez y, si en ese momento se abría el canal de archivos,
+ * Chrome entraba en un ciclo de renegociaciones y el canal nunca abría.
+ * replaceTrack cambia lo que se envía SIN renegociar; en la siguiente llamada se
+ * reutilizan los mismos canales de medios con replaceTrack(pistaNueva).
  *
  * Silenciar y apagar la cámara solo desactivan la pista (track.enabled = false):
  * la llamada sigue y no hay que renegociar.
@@ -52,10 +59,21 @@
     }
   }
 
-  /** Agrega las pistas locales a la conexión con "otro" (dispara la negociación). */
+  /**
+   * Envía las pistas locales al otro.
+   * - Primera llamada: addTrack (crea los canales de medios y dispara la negociación).
+   * - Llamadas siguientes: ya hay un canal de medios de ese tipo sin pista (quedó así
+   *   al colgar), y se le pone la pista nueva con replaceTrack, sin renegociar.
+   */
   function enviarPistas(otro) {
-    const par = App.obtenerPar(otro);
-    for (const pista of medios.getTracks()) par.pc.addTrack(pista, medios);
+    const par = App.obtenerPar(otro, true);
+    for (const pista of medios.getTracks()) {
+      const libre = par.pc.getTransceivers().find((t) =>
+        !t.stopped && t.sender.track === null && t.receiver.track.kind === pista.kind &&
+        (t.direction === 'sendrecv' || t.direction === 'sendonly'));
+      if (libre) libre.sender.replaceTrack(pista);
+      else par.pc.addTrack(pista, medios);
+    }
   }
 
   /** Activa o desactiva los botones según haya o no llamada. */
@@ -81,6 +99,7 @@
     if (!(await capturarMedios())) return;
     llamadaCon = otro;
     ui.remotoNombre.textContent = otro;
+    if (remotos.has(otro)) ui.remoto.srcObject = remotos.get(otro);   // en una 2.ª llamada no hay nuevo evento "track"
     actualizarBotones();
     App.enviar({ tipo: 'llamada', para: otro });
     App.avisoEnChat(otro, `Llamando a ${otro}…`);
@@ -125,7 +144,7 @@
     actualizarBotones();
   }
 
-  /** Termina la llamada con "otro": apaga cámara y micrófono y quita las pistas. */
+  /** Termina la llamada con "otro": apaga cámara y micrófono y deja de enviarlos. */
   function terminar(otro, motivo) {
     if (entranteDe === otro) {
       entranteDe = null;
@@ -134,16 +153,15 @@
     if (llamadaCon !== otro) return actualizarBotones();
 
     llamadaCon = null;
-    if (medios) medios.getTracks().forEach((t) => t.stop());
+    if (medios) medios.getTracks().forEach((t) => t.stop());   // se apaga la luz de la cámara
     medios = null;
     ui.local.srcObject = null;
     ui.remoto.srcObject = null;
 
-    remotos.delete(otro);
     const par = App.buscarPar(otro);   // buscar, no crear: si el otro se fue, la conexión ya no existe
     if (par && par.pc.signalingState !== 'closed') {
       for (const sender of par.pc.getSenders()) {
-        if (sender.track) par.pc.removeTrack(sender);   // dispara una renegociación sin video
+        if (sender.track) sender.replaceTrack(null);   // deja de enviar sin renegociar
       }
     }
     if (motivo) App.avisoEnChat(otro, motivo);
@@ -182,7 +200,10 @@
 
   App.on('llamada', alLlamada);
   App.on('colgar', (m) => terminar(m.de, `${m.de} terminó o rechazó la llamada.`));
-  App.alDesconectarse.push((usuario) => terminar(usuario, 'La llamada se cortó porque el otro usuario se desconectó.'));
+  App.alDesconectarse.push((usuario) => {
+    terminar(usuario, 'La llamada se cortó porque el otro usuario se desconectó.');
+    remotos.delete(usuario);   // su conexión se cerró: el video guardado ya no sirve
+  });
   App.alCambiarChat.push(actualizarBotones);
 
   ui.llamar.addEventListener('click', llamar);
