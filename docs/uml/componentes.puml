@@ -1,25 +1,23 @@
 @startuml componentes
-' Diagrama de componentes del mensajero (Bloque G)
+' Diagrama de componentes del mensajero, con los archivos reales de la implementación
 title Diagrama de componentes - Mensajero WebRTC
 skinparam componentStyle uml2
 skinparam shadowing false
 skinparam defaultFontSize 12
 
-package "Navegador (cliente web)" {
-  [Interfaz web\n(HTML, CSS, JS)] as UI
-  [Módulo de señalización\n(WebSocket)] as MSEN
-  [Módulo de captura de medios\n(getUserMedia)] as MMED
-  [Módulo de conexión entre pares\n(RTCPeerConnection)] as MCON
-  [Módulo de chat] as MCHAT
-  [Módulo de archivos\n(RTCDataChannel)] as MARCH
+package "Navegador (servidor/public)" {
+  [index.html\nInterfaz web] as UI
+  [app.js\nSeñalización (WebSocket),\nusuarios en línea y chat] as APP
+  [webrtc.js\nConexión entre pares\n(RTCPeerConnection,\nperfect negotiation)] as RTC
+  [llamada.js\nCaptura de medios (getUserMedia)\ny videollamada] as LLA
+  [archivos.js\nArchivos por RTCDataChannel\n(16 KiB, SHA-256)] as ARC
 }
 
-package "Nodo (contenedor Docker, Node.js)" {
-  [Servidor HTTP\n(estáticos, /salud, /usuarios)] as HTTP
-  [Servidor de señalización\n(WebSocket /ws)] as SEN
-  [Enlace entre nodos\n(WebSocket /nodo)] as ENL
-  [Directorio de usuarios] as DIR
-  [Registro de eventos\n(logs en stdout)] as LOG
+package "Nodo (contenedor Docker, servidor/src)" {
+  [servidor.js\nHTTP (estáticos, /salud, /usuarios)\ny WebSocket /ws y /nodo] as SRV
+  [enlace.js\nEnlace saliente al nodo par] as ENL
+  [directorio.js\nUsuarios locales y remotos] as DIR
+  [registro.js\nLogs en stdout] as LOG
 }
 
 node "Nodo par\n(misma imagen)" as PAR
@@ -29,26 +27,24 @@ interface "WS /ws (JSON)" as I_WS
 interface "WS /nodo (JSON)" as I_NODO
 interface "SRTP / SCTP sobre UDP\n(hacia el otro navegador)" as I_P2P
 
-HTTP -- I_HTTP
-SEN -- I_WS
-ENL -- I_NODO
-MCON -- I_P2P
+SRV -- I_HTTP
+SRV -- I_WS
+SRV -- I_NODO
+RTC -- I_P2P
 
-UI ..> I_HTTP : carga la página
-UI ..> MCHAT
-UI ..> MARCH
-UI ..> MMED
-UI ..> MCON
-MCHAT ..> MSEN : texto
-MCON ..> MSEN : SDP y candidatos ICE
-MCON ..> MMED : pistas de audio y video
-MARCH ..> MCON : canal de datos
-MSEN ..> I_WS : registro, mensaje, oferta,\nrespuesta, candidato
+UI ..> I_HTTP : carga la página y los scripts
+UI ..> APP
+APP ..> I_WS : registro, mensaje, llamada, oferta,\nrespuesta, candidato, colgar
+RTC ..> APP : App.enviar / App.on
+LLA ..> RTC : addTrack / removeTrack
+ARC ..> RTC : createDataChannel
+LLA ..> APP : avisos y chat
+ARC ..> APP : archivos en el chat
 
-SEN ..> DIR : ¿usuario local o remoto?
-SEN ..> ENL : reenviar al otro nodo
+SRV ..> DIR : ¿usuario local o remoto?
+SRV ..> ENL : reenviar al otro nodo
 ENL ..> PAR : ws://nodo-par:8080/nodo
 PAR ..> I_NODO
-SEN ..> LOG
+SRV ..> LOG
 ENL ..> LOG
 @enduml

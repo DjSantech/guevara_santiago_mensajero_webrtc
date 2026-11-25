@@ -1,45 +1,58 @@
 @startuml secuencia_llamada
-' Fase 3: inicio de una videollamada (señalización, oferta, respuesta y candidatos ICE)
-title Secuencia - inicio de una videollamada
+' Inicio de una videollamada tal como quedó implementado (llamada.js y webrtc.js).
+' Cambio frente a la arquitectura inicial: la oferta de Ana sale antes de que Beto conteste,
+' y Beto agrega sus pistas al contestar, lo que provoca una segunda negociación.
+title Secuencia - inicio de una videollamada (implementación)
 skinparam shadowing false
 skinparam defaultFontSize 12
 autonumber
 
 actor Ana
-participant "Navegador A" as A
+participant "Navegador A\n(llamada.js, webrtc.js)" as A
 participant "nodo-a" as NA
 participant "nodo-b" as NB
-participant "Navegador B" as B
+participant "Navegador B\n(llamada.js, webrtc.js)" as B
 actor Beto
 
 Ana -> A : clic en "Llamar"
 A -> A : getUserMedia({audio, video})
-A -> A : new RTCPeerConnection(iceServers)\naddTrack(pistas locales)
-A -> A : createOffer() y\nsetLocalDescription(oferta)
-A -> NA : {"tipo":"oferta","para":"beto","sdp":...}
+A -> NA : {"tipo":"llamada","para":"beto"}
 NA -> NB : reenvío por el enlace entre nodos
-NB -> B : {"tipo":"oferta","de":"ana","sdp":...}
-B -> Beto : "Ana te está llamando"
-Beto -> B : clic en "Contestar"
-B -> B : getUserMedia, new RTCPeerConnection,\nsetRemoteDescription(oferta)
-B -> B : createAnswer() y\nsetLocalDescription(respuesta)
+NB -> B : {"tipo":"llamada","de":"ana"}
+B -> Beto : "ana te está llamando"
+
+A -> A : addTrack(audio y video)\n-> evento negotiationneeded
+A -> A : setLocalDescription() crea la oferta
+A -> NA : {"tipo":"oferta","para":"beto","sdp":...}
+NA -> NB : reenvío
+NB -> B : oferta
+B -> B : setRemoteDescription(oferta)\nsetLocalDescription() crea la respuesta
 B -> NB : {"tipo":"respuesta","para":"ana","sdp":...}
 NB -> NA : reenvío
-NA -> A : {"tipo":"respuesta","de":"beto","sdp":...}
-A -> A : setRemoteDescription(respuesta)
+NA -> A : respuesta -> setRemoteDescription
 
-par candidatos de A hacia B (trickle ICE)
-  A -> NA : {"tipo":"candidato","para":"beto",...}
+par candidatos ICE en ambos sentidos (trickle ICE)
+  A -> NA : {"tipo":"candidato",...}
   NA -> NB : reenvío
   NB -> B : addIceCandidate()
-else candidatos de B hacia A
-  B -> NB : {"tipo":"candidato","para":"ana",...}
+else
+  B -> NB : {"tipo":"candidato",...}
   NB -> NA : reenvío
   NA -> A : addIceCandidate()
 end
 
-A <-> B : comprobaciones de conectividad ICE (STUN sobre UDP)
-A <-> B : saludo DTLS y derivación de claves SRTP
-A <-> B : audio y video cifrados (SRTP)
-note over NA, NB : Los medios no pasan por los nodos:\nsolo la señalización.
+A <-> B : ICE (STUN sobre UDP), DTLS y claves SRTP
+A -> B : video y audio de Ana (SRTP)\nB los guarda hasta que Beto conteste
+
+Beto -> B : clic en "Contestar"
+B -> B : getUserMedia y addTrack\n-> negotiationneeded: nueva oferta de Beto
+B -> NB : {"tipo":"oferta","para":"ana",...}
+NB -> NA : reenvío
+NA -> A : oferta -> respuesta (por el mismo camino)
+B -> A : video y audio de Beto (SRTP)
+note over A, B
+  Si los dos envían oferta al mismo tiempo (choque o "glare"),
+  el lado cortés (polite) acepta la oferta del otro: perfect negotiation.
+end note
+note over NA, NB : Los medios no pasan por los nodos: solo la señalización.
 @enduml
