@@ -1,0 +1,6 @@
+{
+  "nodo": "nodo-a",
+  "par": "ws://nodo-b:8080/nodo",
+  "par_conectado": true,
+  "usuarios": []
+}

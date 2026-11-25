@@ -1,0 +1,40 @@
+nodo-b-1  | 2026-11-25T19:23:27.178Z [nodo-b] INICIO      escuchando en el puerto 8080; par: ws://nodo-a:8080/nodo
+nodo-b-1  | 2026-11-25T19:23:40.087Z [nodo-b] REGISTRO    beto_4ysj se conectó
+nodo-a-1  | 2026-11-25T19:23:27.294Z [nodo-a] INICIO      escuchando en el puerto 8080; par: ws://nodo-b:8080/nodo
+nodo-b-1  | 2026-11-25T19:23:40.135Z [nodo-b] ENTREGADO   ana_4ysj -> beto_4ysj: hola desde A (4ysj)  [desde nodo-a]
+nodo-b-1  | 2026-11-25T19:23:40.187Z [nodo-b] REENVIADO   beto_4ysj -> ana_4ysj: hola desde B (4ysj)  [hacia nodo-a]
+nodo-a-1  | 2026-11-25T19:23:40.037Z [nodo-a] REGISTRO    ana_4ysj se conectó
+nodo-a-1  | 2026-11-25T19:23:40.135Z [nodo-a] REENVIADO   ana_4ysj -> beto_4ysj: hola desde A (4ysj)  [hacia nodo-b]
+nodo-a-1  | 2026-11-25T19:23:40.187Z [nodo-a] ENTREGADO   beto_4ysj -> ana_4ysj: hola desde B (4ysj)  [desde nodo-b]
+nodo-a-1  | 2026-11-25T19:23:40.236Z [nodo-a] ERROR       nadie_xyz no está conectado (ana_4ysj -> nadie_xyz: prueba)
+nodo-a-1  | 2026-11-25T19:23:43.764Z [nodo-a] REGISTRO    ana se conectó
+nodo-a-1  | 2026-11-25T19:23:44.014Z [nodo-a] REENVIADO   ana -> beto: hola beto desde el navegador  [hacia nodo-b]
+nodo-a-1  | 2026-11-25T19:23:44.022Z [nodo-a] ENTREGADO   beto -> ana: hola ana  [desde nodo-b]
+nodo-a-1  | 2026-11-25T19:23:44.669Z [nodo-a] REENVIADO   ana -> beto (llamada)  [hacia nodo-b]
+nodo-a-1  | 2026-11-25T19:23:45.337Z [nodo-a] REENVIADO   ana -> beto (oferta)  [hacia nodo-b]
+nodo-a-1  | 2026-11-25T19:23:45.340Z [nodo-a] REENVIADO   ana -> beto (candidato)  [hacia nodo-b]
+nodo-a-1  | 2026-11-25T19:23:45.340Z [nodo-a] REENVIADO   ana -> beto (candidato)  [hacia nodo-b]
+nodo-a-1  | 2026-11-25T19:23:45.342Z [nodo-a] REENVIADO   ana -> beto (candidato)  [hacia nodo-b]
+nodo-b-1  | 2026-11-25T19:23:43.767Z [nodo-b] REGISTRO    beto se conectó
+nodo-b-1  | 2026-11-25T19:23:44.015Z [nodo-b] ENTREGADO   ana -> beto: hola beto desde el navegador  [desde nodo-a]
+nodo-b-1  | 2026-11-25T19:23:44.022Z [nodo-b] REENVIADO   beto -> ana: hola ana  [hacia nodo-a]
+nodo-a-1  | 2026-11-25T19:23:45.343Z [nodo-a] REENVIADO   ana -> beto (candidato)  [hacia nodo-b]
+nodo-a-1  | 2026-11-25T19:23:45.343Z [nodo-a] ENTREGADO   beto -> ana (oferta)  [desde nodo-b]
+nodo-a-1  | 2026-11-25T19:23:45.345Z [nodo-a] REENVIADO   ana -> beto (candidato)  [hacia nodo-b]
+nodo-a-1  | 2026-11-25T19:23:45.349Z [nodo-a] ENTREGADO   beto -> ana (candidato)  [desde nodo-b]
+nodo-a-1  | 2026-11-25T19:23:45.349Z [nodo-a] REENVIADO   ana -> beto (candidato)  [hacia nodo-b]
+nodo-b-1  | 2026-11-25T19:23:44.669Z [nodo-b] ENTREGADO   ana -> beto (llamada)  [desde nodo-a]
+nodo-b-1  | 2026-11-25T19:23:45.339Z [nodo-b] ENTREGADO   ana -> beto (oferta)  [desde nodo-a]
+nodo-a-1  | 2026-11-25T19:23:45.350Z [nodo-a] REENVIADO   ana -> beto (candidato)  [hacia nodo-b]
+nodo-b-1  | 2026-11-25T19:23:45.340Z [nodo-b] ENTREGADO   ana -> beto (candidato)  [desde nodo-a]
+nodo-b-1  | 2026-11-25T19:23:45.341Z [nodo-b] ENTREGADO   ana -> beto (candidato)  [desde nodo-a]
+nodo-a-1  | 2026-11-25T19:23:45.350Z [nodo-a] REENVIADO   ana -> beto (candidato)  [hacia nodo-b]
+nodo-b-1  | 2026-11-25T19:23:45.342Z [nodo-b] REENVIADO   beto -> ana (oferta)  [hacia nodo-a]
+nodo-a-1  | 2026-11-25T19:23:45.350Z [nodo-a] REENVIADO   ana -> beto (candidato)  [hacia nodo-b]
+nodo-a-1  | 2026-11-25T19:23:45.350Z [nodo-a] REENVIADO   ana -> beto (candidato)  [hacia nodo-b]
+nodo-b-1  | 2026-11-25T19:23:45.343Z [nodo-b] ENTREGADO   ana -> beto (candidato)  [desde nodo-a]
+nodo-a-1  | 2026-11-25T19:23:45.350Z [nodo-a] REENVIADO   ana -> beto (candidato)  [hacia nodo-b]
+nodo-b-1  | 2026-11-25T19:23:45.344Z [nodo-b] ENTREGADO   ana -> beto (candidato)  [desde nodo-a]
+nodo-b-1  | 2026-11-25T19:23:45.346Z [nodo-b] ENTREGADO   ana -> beto (candidato)  [desde nodo-a]
+nodo-a-1  | 2026-11-25T19:23:45.350Z [nodo-a] REENVIADO   ana -> beto (candidato)  [hacia nodo-b]
+nodo-b-1  | 2026-11-25T19:23:45.348Z [nodo-b] REENVIADO   beto -> ana (candidato)  [hacia nodo-a]

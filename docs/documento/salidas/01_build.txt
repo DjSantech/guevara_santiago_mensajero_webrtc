@@ -1,0 +1,8 @@
+[nodo-a 1/6] FROM docker.io/library/node:22-alpine@sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a
+[nodo-a 2/6] WORKDIR /app
+[nodo-a 3/6] COPY package.json package-lock.json ./
+[nodo-b 4/6] RUN npm ci --omit=dev
+added 1 package, and audited 2 packages in 1s
+[nodo-a 5/6] COPY src ./src
+[nodo-b 6/6] COPY public ./public
+naming to docker.io/library/mensajero-nodo:1.0 done

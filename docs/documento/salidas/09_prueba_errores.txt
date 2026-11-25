@@ -1,0 +1,11 @@
+  OK    ana entra al nodo A
+  OK    beto entra al nodo B
+  OK    ana ve a beto (nodo-b) en línea
+  OK    beto recibe el mensaje de ana
+  OK    ana recibe la respuesta
+  OK    cámara denegada: se muestra el aviso  ->  Permiso de cámara o micrófono denegado. Autorícelo en el candado de la barra de direcciones y en Windows (Configuración > Privacidad).
+  OK    cámara denegada: no queda llamada abierta
+  OK    archivo interrumpido: ana ve el error  ->  [14:23] No se pudo enviar grande.bin: se cerró el canal. | [14:23] beto se desconectó.
+  OK    ana ve que beto se desconectó
+
+Resultado: todo pasó.

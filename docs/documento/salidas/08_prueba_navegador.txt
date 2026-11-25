@@ -1,0 +1,19 @@
+  OK    ana entra al nodo A
+  OK    beto entra al nodo B
+  OK    ana ve a beto (nodo-b) en línea
+  OK    beto recibe el mensaje de ana
+  OK    ana recibe la respuesta
+  OK    beto ve "te está llamando"
+  OK    ana recibe video de beto
+  OK    beto recibe video de ana
+  OK    conexión WebRTC "connected"
+  OK    silenciar apaga la pista de audio
+  OK    apagar cámara apaga la pista de video
+  OK    al colgar beto, ana cierra la llamada
+  OK    archivo enviado justo al colgar llega igual
+  OK    beto recibe el archivo de 20 MB  ->  4.3 s
+  OK    el archivo recibido es idéntico (SHA-256 y tamaño)
+  OK    ana ve la imagen recibida en el chat
+  OK    ana ve que beto se desconectó
+
+Resultado: todo pasó.

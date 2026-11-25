@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Documento final - Mensajero WebRTC</title>
+<style>
+  @page { size: A4; margin: 16mm 16mm 16mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Calibri, Arial, sans-serif; font-size: 10pt; line-height: 1.42; color: #1b1f23; margin: 0; }
+  h1 { font-size: 20pt; margin: 0 0 6px; }
+  h2 { font-size: 15pt; margin: 0 0 8px; padding-bottom: 3px; border-bottom: 2px solid #1f6f5c; color: #1f6f5c; }
+  h3 { font-size: 11.5pt; margin: 14px 0 4px; color: #1f6f5c; page-break-after: avoid; }
+  h4 { font-size: 10.5pt; margin: 10px 0 3px; page-break-after: avoid; }
+  p { margin: 4px 0 6px; text-align: justify; }
+  ul, ol { margin: 4px 0 6px; padding-left: 20px; }
+  li { margin: 2px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 6px 0 10px; font-size: 9pt; page-break-inside: avoid; }
+  th, td { border: 1px solid #c9cdc6; padding: 4px 6px; vertical-align: top; text-align: left; }
+  th { background: #eef1ec; }
+  code { font-family: Consolas, monospace; font-size: 9pt; background: #f1f2ef; padding: 0 3px; }
+  pre { font-family: Consolas, monospace; font-size: 8.4pt; background: #f4f5f2; border: 1px solid #dcdfd8; padding: 6px 8px; margin: 4px 0 8px; white-space: pre-wrap; word-break: break-all; page-break-inside: avoid; }
+  pre.terminal { background: #1e1e1e; color: #e6e6e6; border-color: #1e1e1e; page-break-inside: auto; }
+  .etiqueta { font-size: 8.4pt; color: #555; margin: 6px 0 1px; }
+  figure { margin: 8px 0 12px; text-align: center; page-break-inside: avoid; }
+  figure img { max-width: 100%; border: 1px solid #dcdfd8; }
+  figure.uml img { border: 0; }
+  figcaption { font-size: 8.6pt; color: #555; margin-top: 3px; }
+  .parte { page-break-before: always; }
+  .portada { height: 250mm; display: flex; flex-direction: column; justify-content: center; }
+  .portada .sub { font-size: 12pt; color: #444; margin: 2px 0; }
+  .nota { background: #eef6f3; border-left: 3px solid #1f6f5c; padding: 6px 10px; margin: 8px 0; }
+  .paso { background: #f6f7f4; border-left: 3px solid #2f5fa8; padding: 6px 10px; margin: 8px 0; }
+  .indice li { margin: 3px 0; }
+</style>
+</head>
+<body>
+
+<!-- ============================================================ PORTADA -->
+<div class="portada">
+  <p class="sub">Universidad Tecnológica de Pereira · Facultad de Ingenierías</p>
+  <p class="sub">Ingeniería de Sistemas y Computación · Sistemas Distribuidos</p>
+  <h1 style="margin-top:30px">Mensajero WebRTC en dos nodos Docker</h1>
+  <p class="sub" style="font-size:14pt">Documento final: manual técnico, manual de usuario y explicación del proyecto</p>
+  <p class="sub" style="margin-top:30px">Estudiante: Santiago Guevara</p>
+  <p class="sub">Docente: Felipe Gutiérrez Isaza</p>
+  <p class="sub">Noviembre de 2026</p>
+  <p class="sub" style="margin-top:20px">Repositorio: <code>https://github.com/DjSantech/guevara_santiago_mensajero_webrtc</code></p>
+
+  <h3 style="margin-top:40px">Contenido</h3>
+  <ol class="indice">
+    <li><b>Manual técnico</b>: paso a paso de la implementación, con capturas (imagen, red, señalización, chat, videollamada, archivos, errores y pruebas).</li>
+    <li><b>Manual de usuario</b>: cómo iniciar, conectarse, chatear, llamar, enviar y abrir archivos, y qué hacer ante errores.</li>
+    <li><b>Explicación del proyecto</b>: diagramas UML actualizados, flujos de señalización, medios y datos, decisiones, cambios frente a la arquitectura inicial y problemas resueltos.</li>
+  </ol>
+  <div class="nota">Sobre las capturas: las pantallas de la interfaz se tomaron con Chrome en modo sin ventana y con cámara y micrófono <b>simulados</b> (<code>--use-fake-device-for-media-stream</code>), por eso el video muestra el patrón de prueba de Chrome en lugar de una persona. Las salidas de terminal son reales y se copiaron tal cual.</div>
+</div>
+
+<!-- ============================================================ PARTE 1 -->
+<div class="parte">
+<h2>Parte 1. Manual técnico</h2>
+
+<h3>1.1 Requisitos y estructura</h3>
+<ul>
+  <li><b>Docker Desktop</b> con Docker Compose (probado con Docker 29.9 y Compose 5.6, Windows 11 con WSL 2). En Linux, Docker Engine con el plugin Compose.</li>
+  <li><b>Navegador</b> Chrome o Edge en el anfitrión. La cámara y el micrófono se usan desde el navegador, no desde los contenedores.</li>
+  <li><b>Node.js 22</b> o más reciente en el anfitrión, solo para las pruebas automáticas.</li>
+</ul>
+<pre>docker-compose.yml        dos servicios (nodo-a, nodo-b) en la red mensajero-red
+servidor/
+  Dockerfile              imagen node:22-alpine, usuario sin privilegios y healthcheck
+  src/servidor.js         HTTP + WebSocket (/ws clientes, /nodo enlace) y enrutamiento
+  src/enlace.js           conexión saliente al otro nodo, con reintento cada 2 s
+  src/directorio.js       usuarios locales y remotos
+  src/registro.js         formato de los logs
+  src/cliente-consola.js  cliente de consola (primer avance)
+  src/prueba-avance.js    prueba automática entre nodos
+  public/index.html       interfaz web
+  public/app.js           conexión con el nodo, usuarios en línea y chat
+  public/webrtc.js        conexión entre navegadores (perfect negotiation)
+  public/llamada.js       videollamada
+  public/archivos.js      archivos por RTCDataChannel
+pruebas/prueba-navegador.mjs   prueba de extremo a extremo en Chrome sin ventana
+docs/                     informe, diagramas UML y este documento
+BITACORA.md               una entrada por sesión de trabajo</pre>
+
+<h3>1.2 Paso 1: construcción de la imagen</h3>
+<p>Los dos nodos usan la <b>misma imagen</b>; solo cambian sus variables de entorno. El <code>Dockerfile</code> parte de <code>node:22-alpine</code>, copia primero <code>package.json</code> y <code>package-lock.json</code> para aprovechar la caché de capas, instala la única dependencia (<code>ws</code>) con <code>npm ci</code>, copia el código y la interfaz, cambia al usuario sin privilegios <code>node</code> y define un <code>HEALTHCHECK</code> que consulta <code>/salud</code> cada 10 segundos.</p>
+<div class="paso">Comando (PowerShell, entrando a la carpeta con la <b>C</b> mayúscula):<br><code>docker compose build</code></div>
+<p class="etiqueta">Salida real: los seis pasos del Dockerfile y la imagen resultante</p>
+<pre class="terminal" data-salida="01_build.txt"></pre>
+
+<h3>1.3 Paso 2: red y arranque de los dos nodos</h3>
+<p><code>docker-compose.yml</code> declara la red <code>mensajero-red</code> (tipo <i>bridge</i> definida por el usuario) y los servicios <code>nodo-a</code> y <code>nodo-b</code>. Cada servicio recibe <code>NODO_NOMBRE</code> y <code>PAR_URL</code> (la dirección del otro nodo <b>por nombre</b>, por ejemplo <code>ws://nodo-b:8080/nodo</code>) y publica su puerto 8080 en el anfitrión: 8081 para el nodo A y 8082 para el nodo B.</p>
+<div class="paso">Comandos: <code>docker compose up -d</code> y luego <code>docker compose ps</code></div>
+<pre class="terminal" data-salida="02_up.txt"></pre>
+<pre class="terminal" data-salida="03_ps.txt"></pre>
+<p>Los dos contenedores están <i>healthy</i>. Así quedó la red y así se resuelven los nombres con el DNS interno de Docker (<code>127.0.0.11</code>):</p>
+<div class="paso">Comandos: <code>docker network inspect mensajero-red</code> · <code>docker compose exec nodo-a nslookup nodo-b</code> · <code>curl http://localhost:8081/salud</code></div>
+<pre class="terminal" data-salida="04_red.txt"></pre>
+<pre class="terminal" data-salida="05_dns.txt"></pre>
+<pre class="terminal" data-salida="06_salud.txt"></pre>
+
+<h3>1.4 Paso 3: señalización entre los nodos</h3>
+<p>Cada nodo atiende en el puerto 8080: HTTP (página, <code>/salud</code>, <code>/usuarios</code>), WebSocket <code>/ws</code> para los navegadores y WebSocket <code>/nodo</code> para el otro nodo. Al arrancar, cada nodo abre una conexión saliente hacia su par (<code>enlace.js</code>) y le envía la lista de sus usuarios (mensaje <code>presencia</code>). Cuando un mensaje dirigido (<code>mensaje</code>, <code>llamada</code>, <code>oferta</code>, <code>respuesta</code>, <code>candidato</code>, <code>colgar</code>) va para un usuario del otro nodo, se reenvía envuelto en <code>{"tipo":"reenvio"}</code>. Lo que llega del par solo se entrega localmente; nunca se reenvía de vuelta, así que no hay ciclos.</p>
+<div class="paso">Comando: <code>docker compose exec nodo-a node src/prueba-avance.js ws://nodo-a:8080/ws ws://nodo-b:8080/ws</code></div>
+<pre class="terminal" data-salida="07_prueba_avance.txt"></pre>
+<p class="etiqueta">Logs de los dos nodos (<code>docker compose logs</code>): registro, reenvío y entrega del chat y de la señalización de la llamada</p>
+<pre class="terminal" data-salida="10_logs.txt"></pre>
+
+<h3>1.5 Paso 4: interfaz web y chat</h3>
+<p>La interfaz es HTML, CSS y JavaScript sin frameworks, servida por el propio nodo. <code>app.js</code> abre el WebSocket con <b>su</b> nodo, registra al usuario y muestra la lista de usuarios en línea con el nodo de cada uno. El chat viaja por la señalización: así queda en los logs y funciona aunque no haya llamada. Los textos se insertan con <code>textContent</code>, de modo que nunca se interpretan como HTML.</p>
+<figure><img src="capturas/01_ingreso.png" style="width:78%"><figcaption>Figura 1. Pantalla de ingreso del nodo A (http://localhost:8081).</figcaption></figure>
+<figure><img src="capturas/02_chat.png" style="width:78%"><figcaption>Figura 2. Chat entre ana (nodo A) y beto (nodo B); a la izquierda, los usuarios en línea con su nodo y, arriba a la derecha, el indicador de conexión.</figcaption></figure>
+
+<h3>1.6 Paso 5: videollamada</h3>
+<p><code>llamada.js</code> pide cámara y micrófono con <code>getUserMedia</code>, avisa al otro con <code>{"tipo":"llamada"}</code> y agrega las pistas a la conexión con <code>addTrack</code>. <code>webrtc.js</code> mantiene un <code>RTCPeerConnection</code> por usuario y aplica el patrón <b>perfect negotiation</b> del W3C: cada cambio dispara <code>negotiationneeded</code>, se crea una oferta con <code>setLocalDescription()</code> y se envía por el nodo. Si los dos lados ofrecen a la vez, el lado «cortés» cede. Los mensajes de señalización de cada usuario se procesan en orden, con una cola.</p>
+<figure><img src="capturas/03_llamada_entrante.png" style="width:72%"><figcaption>Figura 3. beto recibe la llamada de ana, con los botones Contestar y Rechazar.</figcaption></figure>
+<figure><img src="capturas/04_videollamada.png" style="width:72%"><figcaption>Figura 4. Videollamada en curso: video remoto grande y video local pequeño (cámara simulada).</figcaption></figure>
+<figure><img src="capturas/05_silenciado.png" style="width:72%"><figcaption>Figura 5. Micrófono silenciado y cámara apagada durante la llamada: los botones cambian a «Activar micrófono» y «Encender cámara».</figcaption></figure>
+<p>Silenciar y apagar la cámara solo cambian <code>track.enabled</code>, sin cortar la llamada. Al colgar se detienen la cámara y el micrófono y se deja de enviar con <code>replaceTrack(null)</code>, que no requiere renegociar. En la llamada siguiente se reutilizan los mismos canales de medios con <code>replaceTrack(pistaNueva)</code>.</p>
+
+<h3>1.7 Paso 6: envío de archivos</h3>
+<p>Los archivos viajan directo entre navegadores por el canal de datos <code>archivos</code> (confiable y ordenado), que se crea junto con la conexión. El protocolo es: un mensaje de <code>inicio</code> con nombre, tamaño, tipo y huella SHA-256, luego fragmentos binarios de 16 KiB y por último <code>fin</code>. Si hay más de 1 MiB sin enviar (<code>bufferedAmount</code>), el emisor pausa hasta <code>bufferedamountlow</code>. El receptor une los fragmentos, recalcula el SHA-256 y responde <code>recibido</code> con el resultado.</p>
+<figure><img src="capturas/06_archivo_progreso.png" style="width:72%"><figcaption>Figura 6. Envío de un archivo de 60 MB con barra de progreso.</figcaption></figure>
+<figure><img src="capturas/07_archivo_recibido.png" style="width:72%"><figcaption>Figura 7. Receptor: el video, la nota de voz y la imagen se reproducen dentro del chat, y cada uno tiene su enlace «Descargar».</figcaption></figure>
+<figure><img src="capturas/08_confirmacion_envio.png" style="width:72%"><figcaption>Figura 8. Emisor: confirmación de que el otro recibió cada archivo completo, con el SHA-256 verificado.</figcaption></figure>
+
+<h3>1.8 Paso 7: manejo de errores</h3>
+<table>
+  <tr><th>Situación</th><th>Qué hace el sistema</th></tr>
+  <tr><td>Permiso de cámara negado</td><td>Aviso «Permiso de cámara o micrófono denegado…» y no se abre la llamada (figura 10). También se distinguen la cámara inexistente, la cámara ocupada por otra aplicación y la página abierta sin HTTPS ni localhost.</td></tr>
+  <tr><td>El otro extremo se desconecta</td><td>El nodo actualiza la presencia: se cierra la conexión con ese usuario, se corta la llamada si la había y el chat muestra «… se desconectó» (figura 9).</td></tr>
+  <tr><td>Archivo interrumpido</td><td>El emisor ve «No se pudo enviar …: se cerró el canal» y el receptor ve «Archivo … interrumpido». Si el archivo llega pero no coincide el tamaño o el SHA-256, se marca como dañado.</td></tr>
+  <tr><td>Se cae el nodo</td><td>La página muestra «Sin conexión con el nodo. Reintentando…» y se reconecta sola cada 2 s. El otro nodo detecta la caída y reintenta el enlace.</td></tr>
+  <tr><td>La conexión entre navegadores falla</td><td>Aviso y reinicio de ICE (<code>restartIce</code>).</td></tr>
+  <tr><td>Nombre en uso o destinatario inexistente</td><td>El nodo responde <code>{"tipo":"error"}</code> y la interfaz lo muestra.</td></tr>
+</table>
+<figure><img src="capturas/09_desconexion.png" style="width:66%"><figcaption>Figura 9. beto cerró su página: ana ve el aviso en el chat y beto desaparece de la lista.</figcaption></figure>
+<figure><img src="capturas/10_error_camara.png" style="width:66%"><figcaption>Figura 10. Permiso de cámara negado: aviso en la parte inferior; la llamada no se inicia.</figcaption></figure>
+
+<h3>1.9 Paso 8: pruebas automáticas</h3>
+<p>Además de la prueba del primer avance, <code>pruebas/prueba-navegador.mjs</code> abre un Chrome sin ventana con perfil temporal y cámara simulada, lo controla por el protocolo de depuración de Chrome y recorre el sistema completo entre los dos nodos.</p>
+<div class="paso">Comandos: <code>node pruebas/prueba-navegador.mjs todo</code> y <code>node pruebas/prueba-navegador.mjs errores</code></div>
+<pre class="terminal" data-salida="08_prueba_navegador.txt"></pre>
+<pre class="terminal" data-salida="09_prueba_errores.txt"></pre>
+</div>
+
+<!-- ============================================================ PARTE 2 -->
+<div class="parte">
+<h2>Parte 2. Manual de usuario</h2>
+
+<h3>2.1 Iniciar la aplicación</h3>
+<ol>
+  <li>Abra <b>Docker Desktop</b> y espere a que diga <i>Engine running</i>.</li>
+  <li>Abra PowerShell en la carpeta del proyecto (con la <b>C</b> mayúscula en la ruta) y ejecute:<br><code>docker compose up --build -d</code></li>
+  <li>Compruebe con <code>docker compose ps</code> que los dos nodos dicen <i>healthy</i>.</li>
+  <li>Abra en el navegador <b>http://localhost:8081</b> (nodo A) y, en otra ventana o perfil, <b>http://localhost:8082</b> (nodo B). Use <i>localhost</i>: si abre la página por la IP del equipo, el navegador bloquea la cámara.</li>
+</ol>
+
+<h3>2.2 Conectarse</h3>
+<p>Escriba un nombre (de 1 a 20 letras, números, <code>-</code> o <code>_</code>) y pulse <b>Entrar</b>. Arriba aparece su nombre con el nodo y, a la derecha, el indicador «Conectado al nodo …». En la columna <b>En línea</b> aparecen los demás usuarios con el nodo al que están conectados.</p>
+
+<h3>2.3 Chatear</h3>
+<p>Pulse el nombre de la otra persona en la lista. Escriba en la caja de abajo y pulse <b>Enviar</b> o Enter. Sus mensajes aparecen a la derecha y los recibidos a la izquierda. Si le escriben desde otro chat, aparece un aviso «Nuevo mensaje de …».</p>
+
+<h3>2.4 Hacer una videollamada</h3>
+<ol>
+  <li>Con el chat abierto, pulse <b>Llamar</b> y acepte el permiso de cámara y micrófono.</li>
+  <li>La otra persona ve «… te está llamando» y pulsa <b>Contestar</b> (o <b>Rechazar</b>).</li>
+  <li>Durante la llamada puede usar <b>Silenciar micrófono</b> y <b>Apagar cámara</b>; al pulsarlos de nuevo se reactivan.</li>
+  <li><b>Colgar</b> termina la llamada para los dos y apaga la cámara.</li>
+</ol>
+
+<h3>2.5 Enviar y abrir archivos</h3>
+<ol>
+  <li>Con el chat abierto, pulse <b>Seleccionar archivo</b>, elija cualquier archivo (también de más de 20 MB) y pulse <b>Enviar archivo</b>.</li>
+  <li>La barra muestra el avance. No es necesario estar en llamada.</li>
+  <li>El receptor ve el archivo en el chat. Las imágenes se ven y los videos y audios se reproducen ahí mismo. Todos tienen el enlace <b>Descargar</b>.</li>
+  <li>El emisor recibe la confirmación «… recibió … completo (SHA-256 verificado)».</li>
+</ol>
+
+<h3>2.6 Errores comunes y qué hacer</h3>
+<table>
+  <tr><th>Mensaje o problema</th><th>Qué hacer</th></tr>
+  <tr><td>«Permiso de cámara o micrófono denegado»</td><td>Pulse el candado de la barra de direcciones y permita cámara y micrófono. En Windows: Configuración, Privacidad y seguridad, Cámara y Micrófono, y active el acceso para el navegador.</td></tr>
+  <tr><td>«La cámara o el micrófono están siendo usados por otra aplicación»</td><td>Cierre la otra aplicación (Teams, Meet, Zoom) o la otra pestaña que usa la cámara.</td></tr>
+  <tr><td>«La cámara solo funciona en HTTPS o en localhost»</td><td>Abra la página con <code>http://localhost:8081</code> o <code>:8082</code>.</td></tr>
+  <tr><td>«El nombre … ya está en uso»</td><td>Elija otro nombre: ya hay alguien conectado con ese nombre en alguno de los dos nodos.</td></tr>
+  <tr><td>«Sin conexión con el nodo. Reintentando…»</td><td>El nodo está apagado o reiniciándose. Revise <code>docker compose ps</code>; la página se reconecta sola.</td></tr>
+  <tr><td>«No se pudo enviar …: se cerró el canal»</td><td>La otra persona se desconectó durante el envío. Vuelva a enviarlo cuando esté en línea.</td></tr>
+  <tr><td>«additional privileges requested … Dockerfile» al construir</td><td>Entre a la carpeta con la <b>C</b> mayúscula (<code>Set-Location "C:\Users\..."</code>) y repita el comando.</td></tr>
+  <tr><td>Puertos 8081 u 8082 ocupados</td><td>Cambie el lado izquierdo de <code>ports</code> en <code>docker-compose.yml</code>, por ejemplo <code>"9081:8080"</code>.</td></tr>
+</table>
+</div>
+
+<!-- ============================================================ PARTE 3 -->
+<div class="parte">
+<h2>Parte 3. Explicación del proyecto</h2>
+
+<h3>3.1 Arquitectura</h3>
+<p>Son dos nodos idénticos (contenedores Docker) en una red <i>bridge</i> propia. Cada usuario se conecta a su nodo, y los nodos se reenvían la señalización entre sí por un enlace WebSocket que se abre por nombre. Los medios y los archivos van directo de navegador a navegador con WebRTC, sin pasar por los nodos.</p>
+<figure class="uml"><img src="../uml/componentes.png" style="width:100%"><figcaption>Figura 11. Diagrama de componentes con los archivos reales de la implementación.</figcaption></figure>
+<figure class="uml"><img src="../uml/despliegue.png" style="width:74%"><figcaption>Figura 12. Diagrama de despliegue: nodos, red, navegadores y anfitrión, con protocolo y puerto.</figcaption></figure>
+
+<h3>3.2 Flujo de señalización, medios y datos</h3>
+<table>
+  <tr><th>Flujo</th><th>Camino</th><th>Protocolo</th></tr>
+  <tr><td>Señalización y chat</td><td>navegador → su nodo → (enlace entre nodos) → nodo del otro → navegador</td><td>WebSocket sobre TCP, mensajes JSON</td></tr>
+  <tr><td>Audio y video</td><td>navegador ↔ navegador</td><td>SRTP sobre UDP, cifrado con claves de DTLS; conectividad con ICE</td></tr>
+  <tr><td>Archivos</td><td>navegador ↔ navegador</td><td>RTCDataChannel: SCTP sobre DTLS sobre UDP</td></tr>
+</table>
+<figure class="uml"><img src="../uml/secuencia_mensaje_nodos.png" style="width:80%"><figcaption>Figura 13. Secuencia: un mensaje pasa de nodo-a a nodo-b.</figcaption></figure>
+<figure class="uml"><img src="../uml/secuencia_llamada.png" style="width:92%"><figcaption>Figura 14. Secuencia del inicio de una videollamada, tal como quedó implementada.</figcaption></figure>
+<figure class="uml"><img src="../uml/secuencia_archivo.png" style="width:92%"><figcaption>Figura 15. Secuencia del envío de un archivo por fragmentos.</figcaption></figure>
+<figure class="uml"><img src="../uml/estados_conexion.png" style="width:46%"><figcaption>Figura 16. Estados de la conexión entre pares y reacción de la interfaz.</figcaption></figure>
+
+<h3>3.3 Decisiones tomadas</h3>
+<table>
+  <tr><th>Decisión</th><th>Motivo</th></tr>
+  <tr><td>Docker + Compose en vez de máquinas virtuales</td><td>Un comando levanta todo, consume poca memoria y la red y los nombres se declaran en un archivo.</td></tr>
+  <tr><td>Red bridge definida por el usuario</td><td>Da DNS interno: los nodos se encuentran por nombre, sin IP en el código.</td></tr>
+  <tr><td>Node.js + <code>ws</code>; WebSocket con JSON propio</td><td>Un solo lenguaje en servidor y navegador; el protocolo se prueba desde la consola. Socket.IO no se descartó por mala calidad, sino porque usa su propio protocolo.</td></tr>
+  <tr><td>Enlace simétrico entre nodos</td><td>Cada nodo abre una conexión saliente para enviar y recibe la del otro: no importa cuál arranque primero.</td></tr>
+  <tr><td>Chat por el nodo; medios y archivos P2P</td><td>El texto es poco y queda en los logs; lo pesado no carga el servidor y va cifrado de extremo a extremo.</td></tr>
+  <tr><td>Interfaz sin frameworks, dividida en cuatro archivos</td><td>Sin paso de compilación; cada archivo tiene una responsabilidad que se puede explicar por separado.</td></tr>
+  <tr><td>Perfect negotiation + cola de señalización</td><td>Resuelve los choques de ofertas y el orden de los mensajes.</td></tr>
+  <tr><td><code>replaceTrack</code> al colgar</td><td>Deja de enviar sin renegociar; evita el ciclo de renegociaciones que provocaba <code>removeTrack</code>.</td></tr>
+  <tr><td>Fragmentos de 16 KiB, umbral de 1 MiB y SHA-256</td><td>Tamaño seguro entre navegadores, memoria controlada y verificación de integridad del archivo completo.</td></tr>
+</table>
+
+<h3>3.4 Cambios frente a la arquitectura inicial</h3>
+<ul>
+  <li><b>Nuevo mensaje <code>llamada</code>.</b> La arquitectura inicial solo tenía oferta, respuesta, candidato y colgar. Hizo falta un aviso previo para mostrar «te está llamando» con Contestar y Rechazar.</li>
+  <li><b>Orden de la llamada.</b> La oferta de quien llama sale de inmediato, y quien contesta agrega sus pistas al pulsar Contestar, con una segunda negociación. El diagrama de secuencia (figura 14) se actualizó.</li>
+  <li><b>El canal de datos nace con la conexión</b>, no cuando se envía el primer archivo.</li>
+  <li><b>Al colgar, <code>replaceTrack(null)</code> en lugar de quitar las pistas.</b></li>
+  <li><b>HTTPS con Caddy no se implementó.</b> Como los dos navegadores corren en el mismo equipo, <code>http://localhost</code> ya es un contexto seguro y la cámara funciona. Caddy solo haría falta para entrar desde otro equipo.</li>
+  <li><b>TURN no se configuró.</b> Basta con los candidatos <i>host</i> en el mismo equipo y queda un STUN público para redes distintas. No se probó entre equipos en redes distintas.</li>
+</ul>
+
+<h3>3.5 Problemas resueltos</h3>
+<table>
+  <tr><th>Problema</th><th>Causa</th><th>Solución</th></tr>
+  <tr><td>El nodo que arranca primero no encuentra al otro</td><td>El otro todavía no escucha (<code>ECONNREFUSED</code>).</td><td>Reintento cada 2 s; el log avisa solo la primera falla.</td></tr>
+  <tr><td><code>docker compose build</code> falla en Windows («additional privileges requested»)</td><td>Compose 5 construye con <i>bake</i> y compara rutas distinguiendo mayúsculas; VS Code abre la carpeta como <code>c:\</code>.</td><td>Entrar con <code>C:</code> mayúscula; documentado en el README.</td></tr>
+  <tr><td><code>docker compose down</code> tardaba 10 s</td><td>Node, como proceso principal del contenedor, no atendía <code>SIGTERM</code>.</td><td>Manejador de señales que cierra el servidor.</td></tr>
+  <tr><td>El que contesta no veía el video</td><td>Las pistas del que llama llegaban antes de pulsar Contestar y se descartaban.</td><td>Se guarda el último video recibido de cada usuario y se muestra al contestar.</td></tr>
+  <tr><td>El canal de archivos no abría después de colgar</td><td>(1) Una oferta llegaba mientras se aplicaba la respuesta anterior y se ignoraba como choque. (2) <code>removeTrack</code> en los dos lados provocaba en Chrome un ciclo infinito de renegociaciones.</td><td>Cola de señalización por usuario, <code>replaceTrack(null)</code> al colgar y canal creado con la conexión. Pasó de cientos de renegociaciones a una sola; el caso quedó en la prueba automática.</td></tr>
+  <tr><td>Al desconectarse alguien se creaba una conexión nueva vacía</td><td>El cierre de la llamada usaba una función que crea la conexión si no existe.</td><td>Nueva función <code>buscarPar</code>, que solo busca.</td></tr>
+</table>
+
+<h3>3.6 Limitaciones</h3>
+<ul>
+  <li>Los mensajes de chat no se guardan: si el destinatario no está conectado, el emisor recibe un error y, al recargar la página, el historial se pierde.</li>
+  <li>El enlace entre nodos va sin cifrar dentro de la red de Docker. Los medios y los archivos sí van cifrados (DTLS y SRTP).</li>
+  <li>No hay autenticación: cualquier nombre libre se puede usar.</li>
+  <li>El archivo se carga completo en memoria para calcular el SHA-256; con archivos de cientos de MB habría que leerlo por partes.</li>
+  <li>No se implementó el RETO (videollamada grupal y pantalla compartida).</li>
+</ul>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,13 @@
+Prueba del primer avance
+  nodo A: ws://nodo-a:8080/ws
+  nodo B: ws://nodo-b:8080/ws
+
+  OK    ana_4ysj se registró en el nodo A  ->  nodo-a
+  OK    beto_4ysj se registró en el nodo B  ->  nodo-b
+  OK    cada uno ve al otro en la lista de presencia (los nodos comparten usuarios)
+  OK    mensaje del nodo A llega al nodo B  ->  de=ana_4ysj, nodo_origen=nodo-a
+  OK    mensaje del nodo B llega al nodo A  ->  de=beto_4ysj, nodo_origen=nodo-b
+  OK    un destinatario inexistente devuelve error
+
+Resultado: todas las pruebas pasaron.
+Revise los logs con: docker compose logs nodo-a nodo-b
