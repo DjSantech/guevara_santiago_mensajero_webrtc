@@ -1,6 +1,6 @@
 {
   "name": "mensajero-nodo",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "Nodo del mensajero WebRTC: servidor HTTP y de señalización por WebSocket",
   "main": "src/servidor.js",
   "scripts": {

@@ -68,7 +68,8 @@
 
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'failed') {
-        App.mostrarAviso(`No fue posible conectar directamente con ${otro}. Si están en redes distintas hace falta un servidor TURN.`);
+        App.mostrarAviso(`No fue posible conectar directamente con ${otro}. Se reintenta… (en redes distintas puede hacer falta un servidor TURN).`);
+        pc.restartIce();   // pide candidatos nuevos; dispara negotiationneeded y una oferta nueva
       } else if (pc.connectionState === 'disconnected') {
         App.mostrarAviso(`La conexión con ${otro} está inestable…`);
       }

@@ -9,7 +9,7 @@ name: mensajero
 services:
   nodo-a:
     build: ./servidor
-    image: mensajero-nodo:fase2
+    image: mensajero-nodo:1.0
     hostname: nodo-a
     environment:
       NODO_NOMBRE: nodo-a
@@ -22,7 +22,7 @@ services:
 
   nodo-b:
     build: ./servidor
-    image: mensajero-nodo:fase2
+    image: mensajero-nodo:1.0
     hostname: nodo-b
     environment:
       NODO_NOMBRE: nodo-b
