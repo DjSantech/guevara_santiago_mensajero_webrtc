@@ -5,13 +5,159 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mensajero WebRTC</title>
 <style>
-  body { font-family: system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; line-height: 1.5; }
-  code { background: #eee; padding: 1px 4px; border-radius: 3px; }
+  :root {
+    --bg: #f4f5f2; --card: #ffffff; --ink: #1d2327; --muted: #5b666e; --line: #dcdfd8;
+    --accent: #1f6f5c; --accent-ink: #ffffff; --mine: #e1f0eb; --other: #eef0ec;
+    --ok: #2e7d32; --err: #b3261e; --warn: #9a5b00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14181b; --card: #1c2226; --ink: #e6e9ea; --muted: #98a4ab; --line: #2f383d;
+      --accent: #59c3a6; --accent-ink: #0d1a16; --mine: #1d3a33; --other: #252c31;
+      --ok: #7bd88a; --err: #f28b82; --warn: #f0b35a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, "Segoe UI", Roboto, sans-serif; }
+  button, input { font: inherit; }
+  button { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button.principal { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  input[type=text] { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 8px; padding: 6px 10px; }
+  [hidden] { display: none !important; }
+
+  /* Pantalla de ingreso */
+  #login { max-width: 360px; margin: 12vh auto; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 24px; }
+  #login h1 { margin: 0 0 4px; font-size: 1.4rem; }
+  #login p { color: var(--muted); margin: 0 0 14px; }
+  #login .fila { display: flex; gap: 8px; }
+  #login input { flex: 1; }
+  #login-msg { color: var(--err); min-height: 1.4em; margin-top: 8px; }
+
+  /* Aplicación */
+  #app { display: grid; grid-template-rows: auto 1fr; height: 100vh; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px; background: var(--card); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  header b { font-size: 1.05rem; }
+  #estado { font-size: .9rem; }
+  #estado::before { content: "●"; margin-right: 6px; }
+  #estado.ok { color: var(--ok); } #estado.error { color: var(--err); } #estado.aviso { color: var(--warn); }
+  main { display: grid; grid-template-columns: 230px 1fr; min-height: 0; }
+  aside { border-right: 1px solid var(--line); padding: 12px; overflow-y: auto; background: var(--card); }
+  aside h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 8px; }
+  .usuario { display: flex; justify-content: space-between; align-items: center; width: 100%; text-align: left; margin-bottom: 6px; }
+  .usuario::before { content: "●"; color: var(--ok); margin-right: 8px; }
+  .usuario.activo { border-color: var(--accent); background: var(--mine); }
+  .usuario span { flex: 1; }
+  .usuario small { color: var(--muted); }
+  .vacio { color: var(--muted); font-size: .9rem; }
+
+  section { display: flex; flex-direction: column; min-height: 0; padding: 12px 16px; gap: 10px; }
+  #barra-chat { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  #chat-titulo { margin: 0; font-size: 1.05rem; }
+  .botones { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  #videos { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; }
+  #videos figure { margin: 0; position: relative; background: #000; border-radius: 10px; overflow: hidden; aspect-ratio: 4 / 3; }
+  #videos video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  #videos figcaption { position: absolute; left: 8px; bottom: 6px; color: #fff; font-size: .8rem; text-shadow: 0 1px 2px #000; }
+
+  #entrante { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid var(--accent); background: var(--mine); border-radius: 10px; }
+
+  #mensajes { flex: 1; overflow-y: auto; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px; min-height: 120px; }
+  .linea { max-width: 78%; margin: 4px 0; padding: 6px 10px; border-radius: 10px; background: var(--other); word-wrap: break-word; }
+  .linea.mia { margin-left: auto; background: var(--mine); }
+  .linea.sistema { max-width: 100%; background: transparent; color: var(--warn); font-size: .9rem; text-align: center; }
+  .linea img, .linea video { display: block; max-width: 100%; max-height: 260px; margin-top: 6px; border-radius: 6px; }
+  .linea audio { display: block; margin-top: 6px; max-width: 100%; }
+  .linea a { color: var(--accent); }
+
+  #form-chat { display: flex; gap: 8px; }
+  #form-chat input { flex: 1; }
+  #zona-archivos { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #zona-progreso { display: flex; gap: 8px; align-items: center; font-size: .9rem; color: var(--muted); }
+  #zona-progreso progress { flex: 1; min-width: 120px; }
+
+  #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); max-width: 92vw; background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,.25); }
+
+  @media (max-width: 720px) {
+    main { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    aside { border-right: 0; border-bottom: 1px solid var(--line); max-height: 30vh; }
+    #videos { grid-template-columns: 1fr 1fr; }
+  }
 </style>
 </head>
 <body>
+
+<!-- 1. Ingreso: el usuario escribe su nombre y se registra en el nodo -->
+<div id="login">
   <h1>Mensajero WebRTC</h1>
-  <p>Este nodo está funcionando. La interfaz gráfica llega en la fase 3.</p>
-  <p>Por ahora se prueba desde la consola: conéctese por WebSocket a <code>/ws</code> o consulte <code>/salud</code> y <code>/usuarios</code>.</p>
+  <p>Escriba su nombre para conectarse a este nodo.</p>
+  <div class="fila">
+    <input id="nombre" type="text" maxlength="20" placeholder="por ejemplo: ana" autocomplete="off" autofocus>
+    <button id="entrar" class="principal" type="button">Entrar</button>
+  </div>
+  <div id="login-msg"></div>
+</div>
+
+<!-- 2. Aplicación -->
+<div id="app" hidden>
+  <header>
+    <div><b>Mensajero WebRTC</b> · <span id="yo"></span></div>
+    <div id="estado">Desconectado</div>
+  </header>
+
+  <main>
+    <aside>
+      <h2>En línea</h2>
+      <div id="usuarios"></div>
+    </aside>
+
+    <section>
+      <div id="barra-chat">
+        <h2 id="chat-titulo">Elija a alguien de la lista</h2>
+        <div class="botones">
+          <button id="llamar" class="principal" type="button" disabled>Llamar</button>
+          <button id="colgar" type="button" disabled>Colgar</button>
+          <button id="silenciar" type="button" disabled>Silenciar micrófono</button>
+          <button id="camara" type="button" disabled>Apagar cámara</button>
+        </div>
+      </div>
+
+      <div id="entrante" hidden>
+        <span id="entrante-texto"></span>
+        <div class="botones">
+          <button id="contestar" class="principal" type="button">Contestar</button>
+          <button id="rechazar" type="button">Rechazar</button>
+        </div>
+      </div>
+
+      <div id="videos" hidden>
+        <figure><video id="remoto" autoplay playsinline></video><figcaption id="remoto-nombre">Remoto</figcaption></figure>
+        <figure><video id="local" autoplay playsinline muted></video><figcaption>Yo</figcaption></figure>
+      </div>
+
+      <div id="mensajes"></div>
+
+      <form id="form-chat" autocomplete="off">
+        <input id="texto" type="text" placeholder="Escriba un mensaje" disabled>
+        <button class="principal" type="submit">Enviar</button>
+      </form>
+
+      <div id="zona-archivos">
+        <input id="archivo" type="file" disabled>
+        <button id="enviar-archivo" type="button" disabled>Enviar archivo</button>
+      </div>
+      <div id="zona-progreso" hidden>
+        <span id="progreso-texto"></span>
+        <progress id="progreso" value="0" max="1"></progress>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="toast" role="status" hidden></div>
+
+<!-- Cada archivo hace una parte; todos usan el objeto App que define app.js -->
+<script src="app.js"></script>
 </body>
 </html>

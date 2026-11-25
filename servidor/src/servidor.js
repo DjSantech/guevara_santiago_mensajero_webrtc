@@ -11,7 +11,7 @@
  * Mensajes que entiende por /ws (JSON, uno por trama):
  *   {"tipo":"registro","usuario":"ana"}
  *   {"tipo":"mensaje","para":"beto","texto":"hola"}
- *   {"tipo":"oferta"|"respuesta"|"candidato"|"colgar","para":"beto",...}  (señalización WebRTC, fase 3)
+ *   {"tipo":"llamada"|"oferta"|"respuesta"|"candidato"|"colgar","para":"beto",...}  (señalización WebRTC)
  *   {"tipo":"lista"}
  *
  * Mensajes que entiende por /nodo (los envía el nodo par):
@@ -39,7 +39,8 @@ const PAR_URL = process.env.PAR_URL || '';
 const CARPETA_PUBLICA = path.join(__dirname, '..', 'public');
 
 // Tipos de mensaje que van dirigidos a otro usuario y que el nodo solo enruta.
-const TIPOS_DIRIGIDOS = ['mensaje', 'oferta', 'respuesta', 'candidato', 'colgar'];
+// "llamada" avisa que alguien quiere iniciar una videollamada; el resto es señalización WebRTC.
+const TIPOS_DIRIGIDOS = ['mensaje', 'llamada', 'oferta', 'respuesta', 'candidato', 'colgar'];
 // Nombres válidos: letras, números, guion y guion bajo, de 1 a 20 caracteres.
 const NOMBRE_VALIDO = /^[a-zA-Z0-9_-]{1,20}$/;
 
