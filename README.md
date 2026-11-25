@@ -9,7 +9,7 @@ Mensajero web en el que dos usuarios chatean, hacen videollamadas y se envían a
 - Los nodos se reenvían la señalización entre sí por un enlace WebSocket que se abre **por nombre** (`ws://nodo-b:8080/nodo`), gracias al DNS interno de Docker.
 - El audio, el video y los archivos van **directo entre navegadores** con WebRTC, sin pasar por los nodos.
 
-**Video de demostración (máx. 5 min):** _(pendiente: pegar aquí el enlace)_
+**Video de demostración (máx. 5 min):** https://youtu.be/NpfdoNDdu7Y
 
 ## Documentación
 
