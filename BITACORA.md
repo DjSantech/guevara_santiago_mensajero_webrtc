@@ -46,7 +46,7 @@ Una entrada por sesión de trabajo: fecha, tiempo dedicado, qué se hizo, qué p
 
 ## Sesión 3. 2026-11-25. Fase 3: interfaz, videollamada y archivos
 
-- **Tiempo dedicado:** (completar)
+- **Tiempo dedicado:** 3 horas
 - **Qué se hizo** (en el orden de los commits):
   1. Interfaz web (`index.html` y `app.js`): ingreso con nombre, usuarios en línea con su nodo, chat de texto por la señalización e indicador de conexión con reconexión automática.
   2. Videollamada (`webrtc.js` y `llamada.js`): un `RTCPeerConnection` por usuario con el patrón *perfect negotiation* del W3C, aviso de llamada con Contestar y Rechazar, silenciar micrófono, apagar cámara y colgar. En el servidor se agregó el tipo `llamada` a los mensajes que se enrutan.
